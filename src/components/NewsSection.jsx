@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Newspaper, Clock, X, ExternalLink, RefreshCw } from 'lucide-react';
+import { Newspaper, Clock, X, ExternalLink, Globe } from 'lucide-react';
 import { getNews } from '../services/footballService';
+import { NewsCardSkeleton } from './Skeleton';
 
 const NewsSection = () => {
   const [news, setNews] = useState([]);
@@ -15,7 +16,7 @@ const NewsSection = () => {
         const data = await getNews();
         setNews(data);
       } catch (e) {
-        console.error(e);
+        console.error('Failed to load news:', e);
       } finally {
         setLoading(false);
       }
@@ -25,34 +26,56 @@ const NewsSection = () => {
 
   return (
     <div className="news-container">
-      <h2 className="section-title">
-        <Newspaper size={22} color="var(--primary)" />
-        أحدث الأخبار الرياضية المباشرة
-      </h2>
+      <div className="d-flex align-center justify-between">
+        <h2 className="section-title">
+          <Newspaper size={20} color="var(--primary)" />
+          <span>أحدث الأخبار والتقارير الرياضية</span>
+          {news.length > 0 && <span className="section-badge-count">{news.length}</span>}
+        </h2>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} className="d-flex align-center gap-1">
+          <Globe size={13} />
+          <span>تغطية حية من الملاعب</span>
+        </span>
+      </div>
 
       {loading ? (
-        <div className="empty-state" style={{ padding: '60px 0' }}>
-          <RefreshCw className="empty-icon animate-spin" size={32} style={{ animation: 'spin 1.5s linear infinite' }} />
-          <p>جاري سحب شريط الأخبار الرياضية الحية...</p>
+        <div className="news-grid">
+          {[...Array(6)].map((_, i) => (
+            <NewsCardSkeleton key={i} />
+          ))}
         </div>
       ) : news.length === 0 ? (
         <div className="glass-card empty-state">
-          <p>لم نتمكن من جلب الأخبار حالياً. يرجى التحقق من اتصالك بالإنترنت.</p>
+          <Newspaper size={36} className="empty-icon" />
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>لم نتمكن من جلب الأخبار الرياضية حالياً</h3>
+          <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+            يرجى التحقق من اتصالك بالإنترنت أو إعادة المحاولة لاحقاً.
+          </p>
         </div>
       ) : (
         <div className="news-grid">
           {news.map((item) => (
-            <motion.div
+            <motion.article
               key={item.id}
-              className="glass-card news-card"
+              className="news-card"
               onClick={() => setActiveArticle(item)}
-              whileHover={{ y: -6 }}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
+              whileHover={{ y: -4 }}
+              transition={{ duration: 0.18 }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveArticle(item); }}
+              aria-label={item.title}
             >
               <div className="news-img-container">
-                <img src={item.img} alt={item.title} className="news-img" />
+                <img 
+                  src={item.img} 
+                  alt={item.title} 
+                  className="news-img" 
+                  loading="lazy"
+                  onError={(e) => {
+                    e.target.src = 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=600';
+                  }}
+                />
                 <span className="news-tag">{item.tag}</span>
               </div>
               
@@ -60,7 +83,7 @@ const NewsSection = () => {
                 <div className="news-meta">
                   <span className="d-flex align-center gap-1">
                     <Clock size={12} />
-                    {item.date}
+                    <span>{item.date}</span>
                   </span>
                   <span>•</span>
                   <span>{item.readTime}</span>
@@ -69,57 +92,72 @@ const NewsSection = () => {
                 <h3 className="news-title">{item.title}</h3>
                 <p className="news-desc">{item.desc}</p>
               </div>
-            </motion.div>
+            </motion.article>
           ))}
         </div>
       )}
 
-      {/* نافذة عرض المقال الكامل */}
+      {/* Modal: Full Article Reading Experience */}
       <AnimatePresence>
         {activeArticle && (
-          <div className="modal-overlay" onClick={() => setActiveArticle(null)}>
+          <div 
+            className="modal-overlay" 
+            onClick={() => setActiveArticle(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeArticle.title}
+          >
             <motion.div
               className="modal-content"
-              style={{ maxWidth: 700 }}
+              style={{ maxWidth: 680 }}
               onClick={(e) => e.stopPropagation()}
-              initial={{ opacity: 0, scale: 0.9, y: 50 }}
+              initial={{ opacity: 0, scale: 0.94, y: 30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 50 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              exit={{ opacity: 0, scale: 0.94, y: 30 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 260 }}
             >
               <div className="modal-header">
                 <span className="modal-title d-flex align-center gap-1">
-                  <Newspaper size={18} />
-                  أخبار الرياضة المباشرة
+                  <Newspaper size={18} color="var(--primary)" />
+                  <span>تفاصيل الخبر الرياضي</span>
                 </span>
-                <button className="close-modal-btn" onClick={() => setActiveArticle(null)}>
-                  <X size={24} />
+                <button 
+                  type="button"
+                  className="close-modal-btn" 
+                  onClick={() => setActiveArticle(null)}
+                  aria-label="إغلاق"
+                >
+                  <X size={20} />
                 </button>
               </div>
 
               <div className="modal-body" style={{ padding: 0 }}>
-                <div style={{ width: '100%', height: 300, position: 'relative' }}>
-                  <img src={activeArticle.img} alt={activeArticle.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <span className="news-tag" style={{ bottom: 16, right: 16, top: 'auto', left: 'auto' }}>
+                <div style={{ width: '100%', height: 260, position: 'relative', overflow: 'hidden' }}>
+                  <img 
+                    src={activeArticle.img} 
+                    alt={activeArticle.title} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
+                  <span className="news-tag" style={{ bottom: 14, right: 14, top: 'auto', left: 'auto' }}>
                     {activeArticle.tag}
                   </span>
                 </div>
                 
-                <div style={{ padding: '24px' }}>
+                <div style={{ padding: '22px' }}>
                   <div className="news-meta" style={{ marginBottom: 12 }}>
                     <span className="d-flex align-center gap-1">
-                      <Clock size={12} />
-                      {activeArticle.date}
+                      <Clock size={13} />
+                      <span>{activeArticle.date}</span>
                     </span>
                     <span>•</span>
                     <span>{activeArticle.readTime}</span>
                   </div>
                   
-                  <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 16, lineHeight: 1.4 }}>
+                  <h2 style={{ fontSize: '1.3rem', fontWeight: 900, color: 'var(--text-primary)', marginBottom: 14, lineHeight: 1.45 }}>
                     {activeArticle.title}
                   </h2>
                   
-                  <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.8, whiteSpace: 'pre-line', marginBottom: 24 }}>
+                  <p style={{ fontSize: '0.98rem', color: 'var(--text-secondary)', lineHeight: 1.85, whiteSpace: 'pre-line', marginBottom: 22 }}>
                     {activeArticle.body}
                   </p>
 
@@ -132,7 +170,7 @@ const NewsSection = () => {
                       style={{ textDecoration: 'none', textAlign: 'center' }}
                     >
                       <ExternalLink size={16} />
-                      قراءة الخبر الكامل من المصدر الأصلي (DW)
+                      <span>قراءة التقرير من المصدر الرسمي (DW)</span>
                     </a>
                   )}
                 </div>

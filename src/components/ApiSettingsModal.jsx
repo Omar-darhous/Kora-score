@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Settings, Database, Key } from 'lucide-react';
+import { X, Settings, Database } from 'lucide-react';
+import Dropdown from './Dropdown';
 
 const ApiSettingsModal = ({ onClose, onSave }) => {
   const [useRealApi, setUseRealApi] = useState(false);
@@ -69,14 +70,17 @@ const ApiSettingsModal = ({ onClose, onSave }) => {
               <>
                 <div className="form-group">
                   <label className="form-label">مزود الخدمة</label>
-                  <select
-                    className="form-input"
+                  <Dropdown
+                    options={[
+                      { value: 'api-football', label: 'API-Football (موصى به)' },
+                      { value: 'football-data', label: 'Football-Data.org' }
+                    ]}
                     value={apiProvider}
-                    onChange={(e) => setApiProvider(e.target.value)}
-                  >
-                    <option value="api-football">API-Football (موصى به)</option>
-                    <option value="football-data">Football-Data.org</option>
-                  </select>
+                    onChange={setApiProvider}
+                    ariaLabel="مزود الخدمة"
+                    fullWidth
+                    className="api-provider-dropdown"
+                  />
                 </div>
 
                 <div className="form-group">
@@ -96,14 +100,14 @@ const ApiSettingsModal = ({ onClose, onSave }) => {
               </>
             )}
 
-            <div 
-              className="glass-card" 
-              style={{ 
-                padding: 16, 
-                fontSize: '0.8rem', 
+            <div
+              className="glass-card"
+              style={{
+                padding: 16,
+                fontSize: '0.8rem',
                 color: 'var(--text-secondary)',
                 backgroundColor: 'rgba(16, 185, 129, 0.05)',
-                borderColor: 'var(--primary-glow)' 
+                borderColor: 'var(--primary-glow)'
               }}
             >
               <h4 style={{ color: 'var(--primary)', fontWeight: 700, marginBottom: 6 }} className="d-flex align-center gap-1">

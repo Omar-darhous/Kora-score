@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, Trophy } from 'lucide-react';
+import { Flame, AlertCircle } from 'lucide-react';
 
-// استيراد المكونات
+// استيراد المكونات المشتركة
 import Header from './components/Header';
-import LiveMatches from './components/LiveMatches';
-import MatchSchedule from './components/MatchSchedule';
-import LeagueStandings from './components/LeagueStandings';
-import NewsSection from './components/NewsSection';
-import MatchDetailModal from './components/MatchDetailModal';
+import MatchModalRoute from './components/MatchModalRoute';
 import ApiSettingsModal from './components/ApiSettingsModal';
+import SearchModal from './components/SearchModal';
+
+// استيراد صفحات المسارات
+import HomePage from './pages/HomePage';
+import MatchesPage from './pages/MatchesPage';
+import StandingsPage from './pages/StandingsPage';
+import NewsPage from './pages/NewsPage';
+import MatchPage from './pages/MatchPage';
+import LeaguePage from './pages/LeaguePage';
+import TeamPage from './pages/TeamPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 // استيراد الخدمات
-import { getMatches, getLeagues, subscribeToLiveMatches, getMatchDetails } from './services/footballService';
+import { getMatches, getLeagues, subscribeToLiveMatches } from './services/footballService';
 
 // مساعدة للحصول على تاريخ اليوم منسق كـ YYYYMMDD
 const getTodayDateStr = () => {
@@ -24,21 +32,35 @@ const getTodayDateStr = () => {
 };
 
 function App() {
-  const [activeTab, setActiveTab] = useState('live');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const backgroundLocation = location.state?.backgroundLocation;
+
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'dark';
   });
-  
+
   const [matches, setMatches] = useState([]);
   const [leagues, setLeagues] = useState([]);
   const [selectedDateStr, setSelectedDateStr] = useState(getTodayDateStr);
   const [selectedLeague, setSelectedLeague] = useState('all');
-  
-  const [selectedMatch, setSelectedMatch] = useState(null);
-  const [selectedMatchDetails, setSelectedMatchDetails] = useState(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
+
   const [showSettings, setShowSettings] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [goalToast, setGoalToast] = useState(null);
+  const [feedbackToast, setFeedbackToast] = useState(null);
+
+  // الاستماع لاختصار لوحة المفاتيح Ctrl+K أو Cmd+K لفتح البحث من أي مكان في التطبيق
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSearch((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   // تطبيق المظهر
   useEffect(() => {
@@ -46,7 +68,7 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // جلب الدوريات المتاحة
+  // جلب البطولات المتاحة
   useEffect(() => {
     setLeagues(getLeagues());
   }, []);
@@ -58,7 +80,7 @@ function App() {
         const data = await getMatches(selectedDateStr);
         setMatches(data);
       } catch (e) {
-        console.error(e);
+        console.error('Failed to load matches for date:', e);
       }
     };
     loadMatches();
@@ -67,12 +89,11 @@ function App() {
   // الاشتراك في تحديثات المباريات المباشرة الحقيقية للـ "اليوم"
   useEffect(() => {
     const unsubscribe = subscribeToLiveMatches((updatedMatches) => {
-      // نقوم بتحديث قائمة المباريات فقط في حال كان التاريخ المختار هو تاريخ اليوم
       const todayStr = getTodayDateStr();
       setSelectedDateStr(prevDate => {
         if (prevDate === todayStr) {
           setMatches(prevMatches => {
-            // فحص الأهداف لإطلاق التنبيهات
+            // فحص الأهداف لإطلاق التنبيهات الفورية
             updatedMatches.forEach(newMatch => {
               if (newMatch.status === 'LIVE') {
                 const oldMatch = prevMatches.find(m => m.id === newMatch.id);
@@ -89,7 +110,7 @@ function App() {
                       minute: newMatch.minute,
                       scorer: isHomeGoal ? `هدف لصالح ${newMatch.homeTeam}` : `هدف لصالح ${newMatch.awayTeam}`
                     });
-                    
+
                     setTimeout(() => setGoalToast(null), 6000);
                   }
                 }
@@ -106,19 +127,29 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // جلب التفاصيل الإضافية عند اختيار مباراة
-  const handleMatchClick = async (match) => {
-    setSelectedMatch(match);
-    setSelectedMatchDetails(null);
-    setLoadingDetails(true);
-    try {
-      const details = await getMatchDetails(match.leagueId, match.id);
-      setSelectedMatchDetails(details);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingDetails(false);
+  // الانتقال لصفحة/نافذة تفاصيل المباراة مع حفظ الموقع الخلفي بعد التحقق الصارم
+  const handleMatchClick = (match) => {
+    const rawId = match?.id;
+    const rawLeagueId = match?.leagueId;
+
+    if (!rawId || !rawLeagueId || (typeof rawId !== 'string' && typeof rawId !== 'number') || typeof rawLeagueId !== 'string') {
+      setFeedbackToast('تفاصيل هذه المباراة غير متوفرة حالياً لعدم اكتمال بيانات البطولة.');
+      setTimeout(() => setFeedbackToast(null), 4000);
+      return;
     }
+
+    const cleanMatchId = String(rawId).trim();
+    const cleanLeagueId = String(rawLeagueId).trim();
+
+    if (!cleanMatchId || !cleanLeagueId) {
+      setFeedbackToast('تفاصيل هذه المباراة غير متوفرة حالياً لعدم اكتمال بيانات البطولة.');
+      setTimeout(() => setFeedbackToast(null), 4000);
+      return;
+    }
+
+    navigate(`/match/${cleanLeagueId}/${cleanMatchId}`, {
+      state: { backgroundLocation: location, match }
+    });
   };
 
   const toggleTheme = () => {
@@ -127,131 +158,224 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* إشعار هدف مباشر حقيقي */}
+      {/* إشعار هدف مباشر بنمط البث التلفزيوني الرياضي */}
       <AnimatePresence>
         {goalToast && (
           <motion.div
-            className="glass-card"
             style={{
               position: 'fixed',
               top: 24,
               left: '50%',
               transform: 'translateX(-50%)',
               zIndex: 9999,
-              padding: '16px 24px',
-              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.95), rgba(251, 191, 36, 0.95))',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: '0 10px 30px rgba(16, 185, 129, 0.4)',
+              padding: '14px 22px',
+              background: 'var(--bg-surface-elevated)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-medium)',
+              borderRight: '4px solid var(--primary)',
+              borderLeft: '4px solid var(--live)',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: 'var(--shadow-lg), 0 0 24px rgba(16, 185, 129, 0.2)',
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
-              direction: 'rtl'
+              gap: 14,
+              direction: 'rtl',
+              minWidth: 320
             }}
-            initial={{ opacity: 0, y: -50, x: '-50%' }}
+            initial={{ opacity: 0, y: -40, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -50, x: '-50%' }}
+            exit={{ opacity: 0, y: -40, x: '-50%' }}
+            transition={{ type: 'spring', damping: 20, stiffness: 280 }}
           >
-            <Bell size={24} className="animate-bounce" />
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 'var(--radius-full)',
+              background: 'var(--live-light)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--live)'
+            }}>
+              <Flame size={22} className="animate-pulse" />
+            </div>
             <div>
-              <h4 style={{ fontWeight: 800, fontSize: '1.05rem', marginBottom: 2 }}>جووووووول! هدف مباشر حقيقي</h4>
-              <p style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                {goalToast.homeTeam} {goalToast.homeScore} - {goalToast.awayScore} {goalToast.awayTeam} (د {goalToast.minute}')
-                <br />
-                {goalToast.scorer}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <span className="live-dot" />
+                <h4 style={{ fontWeight: 900, fontSize: '1rem', color: 'var(--live)' }}>
+                  هدف مباشر! GOAL
+                </h4>
+              </div>
+              <p style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0 }}>
+                {goalToast.homeTeam} <span style={{ fontFamily: 'var(--font-mono)' }}>{goalToast.homeScore} - {goalToast.awayScore}</span> {goalToast.awayTeam} (<bdi>{String(goalToast.minute || '').replace(/['"’`]/g, '').trim()}</bdi> د)
               </p>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                {goalToast.scorer}
+              </span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
         theme={theme}
         toggleTheme={toggleTheme}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenSearch={() => setShowSearch(true)}
       />
 
       <main className="main-content">
-        {activeTab === 'live' && (
-          <>
-            <LiveMatches 
-              matches={matches} 
-              onMatchClick={handleMatchClick} 
-            />
-            
-            <MatchSchedule
-              matches={matches}
-              selectedDateStr={selectedDateStr}
-              setSelectedDateStr={setSelectedDateStr}
-              selectedLeague={selectedLeague}
-              setSelectedLeague={setSelectedLeague}
-              leagues={leagues}
-              onMatchClick={handleMatchClick}
-            />
-          </>
-        )}
-
-        {activeTab === 'matches' && (
-          <MatchSchedule
-            matches={matches}
-            selectedDateStr={selectedDateStr}
-            setSelectedDateStr={setSelectedDateStr}
-            selectedLeague={selectedLeague}
-            setSelectedLeague={setSelectedLeague}
-            leagues={leagues}
-            onMatchClick={handleMatchClick}
+        <Routes location={backgroundLocation || location}>
+          <Route
+            path="/"
+            element={
+              <HomePage
+                matches={matches}
+                selectedDateStr={selectedDateStr}
+                setSelectedDateStr={setSelectedDateStr}
+                selectedLeague={selectedLeague}
+                setSelectedLeague={setSelectedLeague}
+                leagues={leagues}
+                onMatchClick={handleMatchClick}
+              />
+            }
           />
-        )}
 
-        {activeTab === 'standings' && (
-          <LeagueStandings onMatchClick={handleMatchClick} />
-        )}
+          <Route
+            path="/matches"
+            element={
+              <MatchesPage
+                matches={matches}
+                selectedDateStr={selectedDateStr}
+                setSelectedDateStr={setSelectedDateStr}
+                selectedLeague={selectedLeague}
+                setSelectedLeague={setSelectedLeague}
+                leagues={leagues}
+                onMatchClick={handleMatchClick}
+              />
+            }
+          />
 
-        {activeTab === 'news' && (
-          <NewsSection />
-        )}
+          <Route
+            path="/standings"
+            element={<StandingsPage onMatchClick={handleMatchClick} />}
+          />
+
+          <Route
+            path="/news"
+            element={<NewsPage />}
+          />
+
+          <Route
+            path="/league/:leagueId"
+            element={
+              <LeaguePage
+                matches={matches}
+                leagues={leagues}
+                onMatchClick={handleMatchClick}
+              />
+            }
+          />
+
+          <Route
+            path="/team/:teamId"
+            element={
+              <TeamPage
+                matches={matches}
+                leagues={leagues}
+                onMatchClick={handleMatchClick}
+              />
+            }
+          />
+
+          <Route
+            path="/match/:leagueId/:matchId"
+            element={<MatchPage matches={matches} leagues={leagues} />}
+          />
+
+          <Route
+            path="*"
+            element={<NotFoundPage />}
+          />
+        </Routes>
       </main>
 
       <footer className="app-footer">
-        <p>حقوق النشر © {new Date().getFullYear()} كورة سكور. جميع الحقوق محفوظة.</p>
-        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
-          البيانات مستخرجة بالكامل من مصادر ESPN الحية وموجز DW الرياضي في الوقت الفعلي.
+        <p>حقوق النشر © {new Date().getFullYear()} كورة سكور — منصة النتائج الرياضية المباشرة. جميع الحقوق محفوظة.</p>
+        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
+          البيانات والمواعيد مستخرجة في الوقت الفعلي من ملاعب كرة القدم العالمية وموجز الأخبار الرسمي.
         </p>
       </footer>
 
-      {/* النوافذ العائمة */}
-      <AnimatePresence>
-        {selectedMatch && (
-          <MatchDetailModal
-            match={selectedMatch}
-            details={selectedMatchDetails}
-            loading={loadingDetails}
-            onClose={() => {
-              setSelectedMatch(null);
-              setSelectedMatchDetails(null);
-            }}
+      {/* نافذة تفاصيل المباراة عند التصفح الداخلي عبر Background Location */}
+      {backgroundLocation && (
+        <Routes>
+          <Route
+            path="/match/:leagueId/:matchId"
+            element={
+              <MatchModalRoute
+                matches={matches}
+                onClose={() => navigate(-1)}
+              />
+            }
           />
-        )}
+        </Routes>
+      )}
 
+      {/* نافذة البحث السريع الشامل */}
+      <SearchModal
+        isOpen={showSearch}
+        onClose={() => setShowSearch(false)}
+        matches={matches}
+        leagues={leagues}
+        onMatchClick={handleMatchClick}
+      />
+
+      {/* نافذة إعدادات الـ API */}
+      <AnimatePresence>
         {showSettings && (
           <ApiSettingsModal
             onClose={() => setShowSettings(false)}
-            onSave={() => {}}
+            onSave={() => { }}
           />
         )}
       </AnimatePresence>
 
-      <svg width="0" height="0" style={{ position: 'absolute' }}>
-        <defs>
-          <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style={{ stopColor: 'var(--primary)', stopOpacity: 1 }} />
-            <stop offset="100%" style={{ stopColor: 'var(--accent)', stopOpacity: 1 }} />
-          </linearGradient>
-        </defs>
-      </svg>
+      {/* رسالة تنبيه للمباريات غير مكتملة المعرفات */}
+      <AnimatePresence>
+        {feedbackToast && (
+          <motion.div
+            style={{
+              position: 'fixed',
+              bottom: 80,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 9999,
+              padding: '12px 20px',
+              background: 'var(--bg-surface-elevated)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-medium)',
+              borderRight: '4px solid var(--accent)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-lg)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              direction: 'rtl',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              maxWidth: '90vw'
+            }}
+            initial={{ opacity: 0, y: 20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, x: '-50%' }}
+            transition={{ duration: 0.2 }}
+          >
+            <AlertCircle size={18} color="var(--accent)" />
+            <span>{feedbackToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

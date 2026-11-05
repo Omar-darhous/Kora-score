@@ -1,74 +1,130 @@
 import React from 'react';
-import { Sun, Moon, Settings, Trophy, Calendar, Radio, Newspaper } from 'lucide-react';
+import { NavLink, Link } from 'react-router-dom';
+import { Sun, Moon, Settings, Trophy, Calendar, Radio, Newspaper, Search } from 'lucide-react';
 
-const Header = ({ activeTab, setActiveTab, theme, toggleTheme, onOpenSettings }) => {
+const Header = ({ theme, toggleTheme, onOpenSettings, onOpenSearch }) => {
   const menuItems = [
-    { id: 'live', label: 'المباشر واليوم', icon: Radio },
-    { id: 'matches', label: 'المباريات', icon: Calendar },
-    { id: 'standings', label: 'الترتيب', icon: Trophy },
-    { id: 'news', label: 'الأخبار', icon: Newspaper },
+    { id: 'live', path: '/', label: 'المباشر واليوم', icon: Radio, end: true },
+    { id: 'matches', path: '/matches', label: 'المباريات', icon: Calendar },
+    { id: 'standings', path: '/standings', label: 'الترتيب', icon: Trophy },
+    { id: 'news', path: '/news', label: 'الأخبار', icon: Newspaper },
   ];
 
   return (
     <>
-      {/* Top Desktop Navigation */}
+      {/* Top Main Navigation Bar */}
       <header className="nav-bar">
-        <a href="#" className="logo-section" onClick={() => setActiveTab('live')}>
-          <Trophy size={28} className="empty-icon" style={{ opacity: 1, stroke: 'url(#grad1)', color: 'var(--accent)' }} />
-          <span>كورة سكور | KoraScore</span>
-        </a>
+        {/* Brand Section */}
+        <Link
+          to="/"
+          className="logo-section"
+          aria-label="الرئيسية - كورة سكور"
+        >
+          <div className="brand-badge">
+            <Trophy size={20} strokeWidth={2.5} />
+          </div>
+          <div className="brand-text">
+            <span className="brand-title">كورة سكور</span>
+            <span className="brand-subtitle">Kora Score</span>
+          </div>
+        </Link>
 
+        {/* Search Entry Point */}
+        <div
+          className="header-search-bar"
+          title="البحث السريع (Ctrl+K)"
+          tabIndex={0}
+          role="button"
+          onClick={onOpenSearch}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onOpenSearch?.();
+            }
+          }}
+          aria-label="فتح نافذة البحث السريع"
+        >
+          <Search size={16} />
+          <span className="search-placeholder">ابحث عن فريق، بطولة، أو مباراة...</span>
+          <span className="search-shortcut">Ctrl+K</span>
+        </div>
+
+        {/* Desktop Navigation Links */}
         <ul className="nav-menu">
           {menuItems.map((item) => {
             const Icon = item.icon;
             return (
               <li key={item.id}>
-                <a
-                  className={`nav-item nav-link ${activeTab === item.id ? 'active' : ''}`}
-                  onClick={() => setActiveTab(item.id)}
+                <NavLink
+                  to={item.path}
+                  end={item.end}
+                  className={({ isActive }) => `nav-link-btn ${isActive ? 'active' : ''}`}
                 >
-                  <span className="d-flex align-center gap-1">
-                    <Icon size={18} />
-                    {item.label}
-                  </span>
-                </a>
+                  {({ isActive }) => (
+                    <>
+                      <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
+                      <span>{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
               </li>
             );
           })}
         </ul>
 
+        {/* Action Controls */}
         <div className="header-actions">
-          <button 
-            className="action-btn" 
-            onClick={toggleTheme} 
-            title={theme === 'dark' ? 'الوضع المضيء' : 'الوضع الداكن'}
+          {/* زر البحث للشاشات الصغيرة */}
+          <button
+            type="button"
+            className="action-btn mobile-search-btn"
+            onClick={onOpenSearch}
+            title="البحث السريع"
+            aria-label="البحث السريع"
           >
-            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+            <Search size={18} />
           </button>
-          
-          <button 
-            className="action-btn" 
-            onClick={onOpenSettings} 
-            title="إعدادات الـ API"
+
+          <button
+            type="button"
+            className="action-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'التحويل للوضع المضيء' : 'التحويل للوضع الداكن'}
+            aria-label="تبديل المظهر"
           >
-            <Settings size={20} />
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
+          <button
+            type="button"
+            className="action-btn"
+            onClick={onOpenSettings}
+            title="إعدادات الـ API والمصادر"
+            aria-label="الإعدادات"
+          >
+            <Settings size={18} />
           </button>
         </div>
       </header>
 
-      {/* Bottom Mobile Navigation */}
-      <nav className="mobile-bottom-nav">
+      {/* Mobile Bottom Dock Navigation */}
+      <nav className="mobile-bottom-nav" aria-label="شريط التنقل السفلي">
         {menuItems.map((item) => {
           const Icon = item.icon;
           return (
-            <button
+            <NavLink
               key={item.id}
-              className={`bottom-nav-item ${activeTab === item.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(item.id)}
+              to={item.path}
+              end={item.end}
+              className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
             >
-              <Icon size={22} />
-              <span>{item.label}</span>
-            </button>
+              {({ isActive }) => (
+                <>
+                  <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  <span>{item.label}</span>
+                </>
+              )}
+            </NavLink>
           );
         })}
       </nav>

@@ -1,6 +1,6 @@
 // خدمة جلب بيانات كرة القدم الحية والحقيقية بالكامل من واجهات ESPN المفتوحة وموجز الأخبار DW الرياضي
 
-import { LEAGUES, NEWS } from './mockData';
+import { LEAGUES, NEWS } from './mockData.js';
 
 // قائمة بالصور الافتراضية عالية الجودة لتبديلها في الأخبار
 const NEWS_IMAGES = [
@@ -430,12 +430,41 @@ export const subscribeToLiveMatches = (callback) => {
   };
 };
 
+// استخراج وحفظ البيانات الوصفية للموسم الرياضي إن وجدت دون افتراضات
+const parseSeasonMetadata = (rawSeason) => {
+  if (!rawSeason || typeof rawSeason !== 'object') {
+    return null;
+  }
+
+  const season = {};
+  if (rawSeason.year !== undefined && rawSeason.year !== null) {
+    season.year = rawSeason.year;
+  }
+  if (typeof rawSeason.startDate === 'string') {
+    season.startDate = rawSeason.startDate;
+  }
+  if (typeof rawSeason.endDate === 'string') {
+    season.endDate = rawSeason.endDate;
+  }
+  if (typeof rawSeason.displayName === 'string') {
+    season.displayName = rawSeason.displayName;
+  }
+
+  return Object.keys(season).length > 0 ? season : null;
+};
+
 const parseStandingsEntries = (entries) => {
   const parsed = entries.map(item => {
     const stats = item.stats || [];
     const getStatVal = (name) => stats.find(s => s.name === name)?.value ?? 0;
 
+    // استخراج معرف الفريق الثابت بنمط مطابق لـ homeTeamId و awayTeamId
+    const teamId = item.team?.id !== undefined && item.team?.id !== null
+      ? String(item.team.id)
+      : (item.teamId ? String(item.teamId) : null);
+
     return {
+      teamId,
       rank: getStatVal('rank') || item.rank || 0,
       team: item.team?.displayName || 'فريق كروي',
       logo: item.team?.logos?.[0]?.href || 'https://a.espncdn.com/i/teamlogos/default-soccer.png',
@@ -468,29 +497,33 @@ const parseStandingsEntries = (entries) => {
 // جلب ترتيب الدوري الحقيقي (الدوري المصري الحالي المحدث لموسم 2025/2026 بدون شعارات أندية)
 export const getStandings = async (leagueId = 'eng.1') => {
   if (leagueId === 'egypt.1') {
-    return [{
+    const mockGroup = {
       name: 'الدوري المصري الممتاز (الموسم الحالي 2025-2026)',
+      season: null,
       entries: [
-        { rank: 1, team: 'الزمالك (البطل)', logo: '', played: 25, win: 17, draw: 5, loss: 3, goalsFor: 46, goalsAgainst: 20, points: 56 },
-        { rank: 2, team: 'بيراميدز', logo: '', played: 25, win: 16, draw: 6, loss: 3, goalsFor: 48, goalsAgainst: 22, points: 54 },
-        { rank: 3, team: 'الأهلي', logo: '', played: 25, win: 15, draw: 6, loss: 4, goalsFor: 52, goalsAgainst: 18, points: 51 },
-        { rank: 4, team: 'المصري البورسعيدي', logo: '', played: 25, win: 13, draw: 7, loss: 5, goalsFor: 39, goalsAgainst: 26, points: 46 },
-        { rank: 5, team: 'مودرن فيوتشر', logo: '', played: 25, win: 11, draw: 9, loss: 5, goalsFor: 33, goalsAgainst: 27, points: 42 },
-        { rank: 6, team: 'سموحة', logo: '', played: 25, win: 11, draw: 7, loss: 7, goalsFor: 36, goalsAgainst: 34, points: 40 },
-        { rank: 7, team: 'زد', logo: '', played: 25, win: 10, draw: 9, loss: 6, goalsFor: 41, goalsAgainst: 31, points: 39 },
-        { rank: 8, team: 'البنك الأهلي', logo: '', played: 25, win: 10, draw: 8, loss: 7, goalsFor: 35, goalsAgainst: 30, points: 38 },
-        { rank: 9, team: 'سيراميكا كليوباترا', logo: '', played: 25, win: 10, draw: 7, loss: 8, goalsFor: 44, goalsAgainst: 37, points: 37 },
-        { rank: 10, team: 'طلائع الجيش', logo: '', played: 25, win: 9, draw: 9, loss: 7, goalsFor: 26, goalsAgainst: 25, points: 36 },
-        { rank: 11, team: 'الاتحاد السكندري', logo: '', played: 25, win: 9, draw: 8, loss: 8, goalsFor: 29, goalsAgainst: 33, points: 35 },
-        { rank: 12, team: 'إنبي', logo: '', played: 25, win: 9, draw: 7, loss: 9, goalsFor: 35, goalsAgainst: 34, points: 34 },
-        { rank: 13, team: 'الجونة', logo: '', played: 25, win: 7, draw: 12, loss: 6, goalsFor: 29, goalsAgainst: 34, points: 33 },
-        { rank: 14, team: 'غزل المحلة', logo: '', played: 25, win: 8, draw: 7, loss: 10, goalsFor: 28, goalsAgainst: 35, points: 31 },
-        { rank: 15, team: 'فاركو', logo: '', played: 25, win: 7, draw: 7, loss: 11, goalsFor: 32, goalsAgainst: 45, points: 28 },
-        { rank: 16, team: 'الإسماعيلي', logo: '', played: 25, win: 6, draw: 8, loss: 11, goalsFor: 32, goalsAgainst: 40, points: 26 },
-        { rank: 17, team: 'حرس الحدود', logo: '', played: 25, win: 5, draw: 8, loss: 12, goalsFor: 23, goalsAgainst: 43, points: 23 },
-        { rank: 18, team: 'كهرباء الإسماعيلية', logo: '', played: 25, win: 4, draw: 8, loss: 13, goalsFor: 17, goalsAgainst: 40, points: 20 }
+        { teamId: 'egy-team-zamalek', rank: 1, team: 'الزمالك (البطل)', logo: '', played: 25, win: 17, draw: 5, loss: 3, goalsFor: 46, goalsAgainst: 20, points: 56 },
+        { teamId: 'egy-team-pyramids', rank: 2, team: 'بيراميدز', logo: '', played: 25, win: 16, draw: 6, loss: 3, goalsFor: 48, goalsAgainst: 22, points: 54 },
+        { teamId: 'egy-team-ahly', rank: 3, team: 'الأهلي', logo: '', played: 25, win: 15, draw: 6, loss: 4, goalsFor: 52, goalsAgainst: 18, points: 51 },
+        { teamId: 'egy-team-masry', rank: 4, team: 'المصري البورسعيدي', logo: '', played: 25, win: 13, draw: 7, loss: 5, goalsFor: 39, goalsAgainst: 26, points: 46 },
+        { teamId: null, rank: 5, team: 'مودرن فيوتشر', logo: '', played: 25, win: 11, draw: 9, loss: 5, goalsFor: 33, goalsAgainst: 27, points: 42 },
+        { teamId: null, rank: 6, team: 'سموحة', logo: '', played: 25, win: 11, draw: 7, loss: 7, goalsFor: 36, goalsAgainst: 34, points: 40 },
+        { teamId: null, rank: 7, team: 'زد', logo: '', played: 25, win: 10, draw: 9, loss: 6, goalsFor: 41, goalsAgainst: 31, points: 39 },
+        { teamId: null, rank: 8, team: 'البنك الأهلي', logo: '', played: 25, win: 10, draw: 8, loss: 7, goalsFor: 35, goalsAgainst: 30, points: 38 },
+        { teamId: null, rank: 9, team: 'سيراميكا كليوباترا', logo: '', played: 25, win: 10, draw: 7, loss: 8, goalsFor: 44, goalsAgainst: 37, points: 37 },
+        { teamId: null, rank: 10, team: 'طلائع الجيش', logo: '', played: 25, win: 9, draw: 9, loss: 7, goalsFor: 26, goalsAgainst: 25, points: 36 },
+        { teamId: 'egy-team-ittihad', rank: 11, team: 'الاتحاد السكندري', logo: '', played: 25, win: 9, draw: 8, loss: 8, goalsFor: 29, goalsAgainst: 33, points: 35 },
+        { teamId: null, rank: 12, team: 'إنبي', logo: '', played: 25, win: 9, draw: 7, loss: 9, goalsFor: 35, goalsAgainst: 34, points: 34 },
+        { teamId: null, rank: 13, team: 'الجونة', logo: '', played: 25, win: 7, draw: 12, loss: 6, goalsFor: 29, goalsAgainst: 34, points: 33 },
+        { teamId: null, rank: 14, team: 'غزل المحلة', logo: '', played: 25, win: 8, draw: 7, loss: 10, goalsFor: 28, goalsAgainst: 35, points: 31 },
+        { teamId: null, rank: 15, team: 'فاركو', logo: '', played: 25, win: 7, draw: 7, loss: 11, goalsFor: 32, goalsAgainst: 45, points: 28 },
+        { teamId: 'egy-team-ismaily', rank: 16, team: 'الإسماعيلي', logo: '', played: 25, win: 6, draw: 8, loss: 11, goalsFor: 32, goalsAgainst: 40, points: 26 },
+        { teamId: null, rank: 17, team: 'حرس الحدود', logo: '', played: 25, win: 5, draw: 8, loss: 12, goalsFor: 23, goalsAgainst: 43, points: 23 },
+        { teamId: null, rank: 18, team: 'كهرباء الإسماعيلية', logo: '', played: 25, win: 4, draw: 8, loss: 13, goalsFor: 17, goalsAgainst: 40, points: 20 }
       ]
-    }];
+    };
+    const result = [mockGroup];
+    result.season = null;
+    return result;
   }
 
   try {
@@ -499,20 +532,30 @@ export const getStandings = async (leagueId = 'eng.1') => {
     if (!response.ok) return [];
     const data = await response.json();
 
+    const season = parseSeasonMetadata(data.season);
     const children = data.children || [];
     
+    let result = [];
     if (children.length === 1) {
       const entries = children[0]?.standings?.entries || [];
-      return [{
+      result = [{
         name: data.name || 'ترتيب الدوري',
+        season,
         entries: parseStandingsEntries(entries)
       }];
     } else {
-      return children.map(group => ({
+      result = children.map(group => ({
         name: group.name || 'المجموعة',
+        season,
         entries: parseStandingsEntries(group.standings?.entries || [])
       }));
     }
+
+    if (season) {
+      result.season = season;
+    }
+
+    return result;
   } catch (e) {
     console.error(`Failed to fetch standings for league ${leagueId}:`, e);
     return [];
@@ -675,5 +718,329 @@ export const getWorldCupKnockouts = async () => {
   } catch (e) {
     console.error("Failed to fetch world cup knockouts:", e);
     return null;
+  }
+};
+
+// ==========================================
+// خدمات بيانات تفاصيل الأندية وقوائم اللاعبين والنتائج
+// ==========================================
+
+const EGYPTIAN_MOCK_TEAMS_DATA = {
+  'egy-team-ahly': {
+    id: 'egy-team-ahly',
+    name: 'الأهلي',
+    shortName: 'الأهلي',
+    abbreviation: 'AHL',
+    logo: '',
+    venue: { name: 'ستاد القاهرة الدولي', capacity: 75000, city: 'القاهرة' },
+    defaultLeague: { id: 'egypt.1', name: 'الدوري المصري الممتاز', midsizeName: 'egypt.1' }
+  },
+  'egy-team-zamalek': {
+    id: 'egy-team-zamalek',
+    name: 'الزمالك',
+    shortName: 'الزمالك',
+    abbreviation: 'ZAM',
+    logo: '',
+    venue: { name: 'ستاد القاهرة الدولي', capacity: 75000, city: 'القاهرة' },
+    defaultLeague: { id: 'egypt.1', name: 'الدوري المصري الممتاز', midsizeName: 'egypt.1' }
+  },
+  'egy-team-pyramids': {
+    id: 'egy-team-pyramids',
+    name: 'بيراميدز',
+    shortName: 'بيراميدز',
+    abbreviation: 'PYR',
+    logo: '',
+    venue: { name: 'ستاد الدفاع الجوي', capacity: 30000, city: 'القاهرة' },
+    defaultLeague: { id: 'egypt.1', name: 'الدوري المصري الممتاز', midsizeName: 'egypt.1' }
+  },
+  'egy-team-masry': {
+    id: 'egy-team-masry',
+    name: 'المصري البورسعيدي',
+    shortName: 'المصري',
+    abbreviation: 'MAS',
+    logo: '',
+    venue: { name: 'ستاد برج العرب', capacity: 86000, city: 'الإسكندرية' },
+    defaultLeague: { id: 'egypt.1', name: 'الدوري المصري الممتاز', midsizeName: 'egypt.1' }
+  },
+  'egy-team-ittihad': {
+    id: 'egy-team-ittihad',
+    name: 'الاتحاد السكندري',
+    shortName: 'الاتحاد',
+    abbreviation: 'ITH',
+    logo: '',
+    venue: { name: 'ستاد الإسكندرية', capacity: 20000, city: 'الإسكندرية' },
+    defaultLeague: { id: 'egypt.1', name: 'الدوري المصري الممتاز', midsizeName: 'egypt.1' }
+  },
+  'egy-team-ismaily': {
+    id: 'egy-team-ismaily',
+    name: 'الإسماعيلي',
+    shortName: 'الإسماعيلي',
+    abbreviation: 'ISM',
+    logo: '',
+    venue: { name: 'ستاد الإسماعيلية', capacity: 18525, city: 'الإسماعيلية' },
+    defaultLeague: { id: 'egypt.1', name: 'الدوري المصري الممتاز', midsizeName: 'egypt.1' }
+  }
+};
+
+const formatMockPlayers = (names) => {
+  return names.map((name, idx) => {
+    let position = 'لاعب وسط';
+    let positionGroup = 'midfielders';
+    if (idx === 0) {
+      position = 'حارس مرمى';
+      positionGroup = 'goalkeepers';
+    } else if (idx >= 1 && idx <= 4) {
+      position = 'مدافع';
+      positionGroup = 'defenders';
+    } else if (idx >= 5 && idx <= 7) {
+      position = 'لاعب وسط';
+      positionGroup = 'midfielders';
+    } else {
+      position = 'مهاجم';
+      positionGroup = 'forwards';
+    }
+    return {
+      id: `egy-player-${idx + 1}`,
+      name,
+      jersey: String(idx + 1),
+      position,
+      positionGroup,
+      citizenship: 'مصر',
+      photo: ''
+    };
+  });
+};
+
+const getEgyptianTeamRoster = (teamId) => {
+  const matches = getMockEgyptianMatches();
+  for (const m of matches) {
+    if (m.homeTeamId === teamId && m.lineups?.home) {
+      return formatMockPlayers(m.lineups.home);
+    }
+    if (m.awayTeamId === teamId && m.lineups?.away) {
+      return formatMockPlayers(m.lineups.away);
+    }
+  }
+  return [];
+};
+
+const getEgyptianTeamSchedule = (teamId) => {
+  const matches = getMockEgyptianMatches();
+  const teamMatches = matches.filter(m => m.homeTeamId === teamId || m.awayTeamId === teamId);
+  return teamMatches.map(m => {
+    const isHome = m.homeTeamId === teamId;
+    const teamScore = isHome ? m.homeScore : m.awayScore;
+    const opponentScore = isHome ? m.awayScore : m.homeScore;
+    let result = 'D';
+    if (teamScore > opponentScore) result = 'W';
+    else if (teamScore < opponentScore) result = 'L';
+    return {
+      id: m.id,
+      leagueId: 'egypt.1',
+      date: '2026-05-29T19:30:00Z',
+      time: m.time,
+      name: `${m.homeTeam} ضد ${m.awayTeam}`,
+      homeTeam: m.homeTeam,
+      awayTeam: m.awayTeam,
+      homeScore: m.homeScore,
+      awayScore: m.awayScore,
+      isHome,
+      opponentName: isHome ? m.awayTeam : m.homeTeam,
+      opponentLogo: isHome ? m.awayLogo : m.homeLogo,
+      result,
+      status: m.status || 'FT',
+      rawEvent: m
+    };
+  });
+};
+
+const categorizePosition = (posName = '') => {
+  const p = (posName || '').toLowerCase();
+  if (p.includes('goal') || p.includes('keeper')) return 'goalkeepers';
+  if (p.includes('defen') || p.includes('back')) return 'defenders';
+  if (p.includes('midfield')) return 'midfielders';
+  if (p.includes('forward') || p.includes('striker') || p.includes('winger') || p.includes('att')) return 'forwards';
+  return 'other';
+};
+
+const translatePosition = (posName = '') => {
+  const p = (posName || '').toLowerCase();
+  if (p.includes('goal') || p.includes('keeper')) return 'حارس مرمى';
+  if (p.includes('center-back') || p.includes('central defender')) return 'قلب دفاع';
+  if (p.includes('left-back') || p.includes('left back')) return 'ظهير أيسر';
+  if (p.includes('right-back') || p.includes('right back')) return 'ظهير أيمن';
+  if (p.includes('defen') || p.includes('back')) return 'مدافع';
+  if (p.includes('defensive midfield')) return 'وسط دفاعي';
+  if (p.includes('attacking midfield')) return 'وسط هجومي';
+  if (p.includes('midfield')) return 'لاعب وسط';
+  if (p.includes('left wing')) return 'جناح أيسر';
+  if (p.includes('right wing')) return 'جناح أيمن';
+  if (p.includes('striker') || p.includes('center forward')) return 'رأس حربة';
+  if (p.includes('forward') || p.includes('att')) return 'مهاجم';
+  return posName || 'لاعب';
+};
+
+// جلب تفاصيل وهوية النادي
+export const getTeamDetails = async (teamId) => {
+  if (!teamId || teamId === 'null' || teamId === 'undefined') {
+    return null;
+  }
+  const cleanId = String(teamId).trim();
+  if (cleanId.startsWith('egy-team-')) {
+    return EGYPTIAN_MOCK_TEAMS_DATA[cleanId] || {
+      id: cleanId,
+      name: 'فريق مصري',
+      shortName: 'فريق مصري',
+      abbreviation: 'EGY',
+      logo: '',
+      venue: null,
+      defaultLeague: { id: 'egypt.1', name: 'الدوري المصري الممتاز', midsizeName: 'egypt.1' }
+    };
+  }
+
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/teams/${cleanId}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const t = data.team;
+    if (!t) return null;
+
+    return {
+      id: String(t.id || cleanId),
+      name: t.displayName || t.name || 'فريق كروي',
+      shortName: t.shortDisplayName || t.displayName || '',
+      abbreviation: t.abbreviation || '',
+      logo: t.logos?.[0]?.href || '',
+      venue: t.venue ? {
+        name: t.venue.fullName || '',
+        capacity: t.venue.capacity || null,
+        city: t.venue.address?.city || ''
+      } : null,
+      defaultLeague: t.defaultLeague ? {
+        id: t.defaultLeague.id,
+        name: t.defaultLeague.name,
+        midsizeName: t.defaultLeague.midsizeName
+      } : null
+    };
+  } catch (err) {
+    console.error(`Failed to fetch details for team ${cleanId}:`, err);
+    return null;
+  }
+};
+
+// جلب نتائج ومباريات النادي الأخيرة
+export const getTeamSchedule = async (leagueId, teamId) => {
+  if (!teamId || teamId === 'null' || teamId === 'undefined') {
+    return [];
+  }
+  const cleanId = String(teamId).trim();
+  if (cleanId.startsWith('egy-team-')) {
+    return getEgyptianTeamSchedule(cleanId);
+  }
+
+  if (!leagueId) {
+    return [];
+  }
+
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/teams/${cleanId}/schedule`;
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const events = data.events || [];
+
+    return events.map(event => {
+      const comp = event.competitions?.[0] || {};
+      const competitors = comp.competitors || [];
+      const homeComp = competitors.find(c => c.homeAway === 'home') || {};
+      const awayComp = competitors.find(c => c.homeAway === 'away') || {};
+
+      const isHome = String(homeComp.id || homeComp.team?.id) === cleanId;
+      const teamComp = isHome ? homeComp : awayComp;
+      const opponentComp = isHome ? awayComp : homeComp;
+
+      const homeScore = parseInt(homeComp.score?.value ?? homeComp.score?.displayValue ?? homeComp.score ?? 0, 10);
+      const awayScore = parseInt(awayComp.score?.value ?? awayComp.score?.displayValue ?? awayComp.score ?? 0, 10);
+      const teamScore = isHome ? homeScore : awayScore;
+      const opponentScore = isHome ? awayScore : homeScore;
+
+      let result = 'D';
+      if (teamComp.winner === true) {
+        result = 'W';
+      } else if (opponentComp.winner === true) {
+        result = 'L';
+      } else if (teamScore > opponentScore) {
+        result = 'W';
+      } else if (teamScore < opponentScore) {
+        result = 'L';
+      }
+
+      let status = 'FT';
+      if (event.status?.type?.state === 'in') {
+        status = 'LIVE';
+      } else if (event.status?.type?.state === 'pre') {
+        status = 'NS';
+      }
+
+      return {
+        id: event.id,
+        leagueId,
+        date: event.date,
+        name: event.name || `${homeComp.team?.displayName || ''} ضد ${awayComp.team?.displayName || ''}`,
+        homeTeam: homeComp.team?.displayName || 'فريق مستضيف',
+        awayTeam: awayComp.team?.displayName || 'فريق ضيف',
+        homeScore,
+        awayScore,
+        isHome,
+        opponentName: opponentComp.team?.displayName || '',
+        opponentLogo: opponentComp.team?.logos?.[0]?.href || opponentComp.team?.logo || '',
+        result,
+        status,
+        rawEvent: event
+      };
+    });
+  } catch (err) {
+    console.error(`Failed to fetch schedule for team ${cleanId} in league ${leagueId}:`, err);
+    return [];
+  }
+};
+
+// جلب قائمة لاعبي النادي
+export const getTeamRoster = async (leagueId, teamId) => {
+  if (!teamId || teamId === 'null' || teamId === 'undefined') {
+    return [];
+  }
+  const cleanId = String(teamId).trim();
+  if (cleanId.startsWith('egy-team-')) {
+    return getEgyptianTeamRoster(cleanId);
+  }
+
+  if (!leagueId) {
+    return [];
+  }
+
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/teams/${cleanId}/roster`;
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const athletes = data.athletes || [];
+
+    return athletes.map(a => {
+      const posName = a.position?.displayName || a.position?.name || '';
+      return {
+        id: String(a.id || Math.random()),
+        name: a.displayName || a.fullName || 'لاعب',
+        jersey: a.jersey ? String(a.jersey) : '',
+        position: translatePosition(posName),
+        positionGroup: categorizePosition(posName),
+        citizenship: a.citizenship || '',
+        photo: a.headshot?.href || ''
+      };
+    });
+  } catch (err) {
+    console.error(`Failed to fetch roster for team ${cleanId} in league ${leagueId}:`, err);
+    return [];
   }
 };

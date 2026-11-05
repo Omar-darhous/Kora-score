@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Trophy, RefreshCw, Star } from 'lucide-react';
 import { getStandings, getLeagues, getWorldCupKnockouts } from '../services/footballService';
+import { TableRowSkeleton } from './Skeleton';
+import Dropdown from './Dropdown';
+import { EgyptianDisclaimer, EgyptianBadge, EGYPTIAN_BADGE_TEXT } from './EgyptianDisclaimer';
 
 // دالة لتصنيف المراكز حسب البطولة وتحديد لون الهامش الأيمن والتسمية
 const getRankStyleAndText = (leagueId, rank) => {
@@ -294,7 +297,9 @@ const BracketMatchCard = ({ match, onMatchClick, round, index, hoverState, setHo
     >
       <div className="match-card-header">
         <span className="match-round-tag">
-          {isLive ? `مباشر د ${match.minute}'` : isFT ? 'انتهت' : match.time}
+          {isLive ? (
+            <>مباشر <bdi>{String(match.minute || '').replace(/['"’`]/g, '').trim()}</bdi> د</>
+          ) : isFT ? 'انتهت' : match.time}
         </span>
         {isLive && <span className="live-dot animate-pulse"></span>}
       </div>
@@ -432,11 +437,32 @@ const KnockoutBracket = ({ bracketData, onMatchClick, hoverState, setHoverState 
   );
 };
 
-const LeagueStandings = ({ onMatchClick }) => {
+const LeagueStandings = ({
+  onMatchClick,
+  activeLeague: propActiveLeague,
+  onLeagueChange,
+  hideLeagueSelector = false,
+  standingsData = null,
+  loading: propLoading = null,
+  showTitle = true
+}) => {
   const leagues = getLeagues();
-  const [activeLeague, setActiveLeague] = useState(leagues[0].id);
-  const [standingsGroups, setStandingsGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [internalLeague, setInternalLeague] = useState(leagues[0].id);
+  
+  const activeLeague = propActiveLeague !== undefined ? propActiveLeague : internalLeague;
+  const setActiveLeague = (newLeague) => {
+    if (onLeagueChange) {
+      onLeagueChange(newLeague);
+    } else {
+      setInternalLeague(newLeague);
+    }
+  };
+
+  const [internalStandingsGroups, setInternalStandingsGroups] = useState([]);
+  const [internalLoading, setInternalLoading] = useState(true);
+
+  const standingsGroups = standingsData !== null ? standingsData : internalStandingsGroups;
+  const loading = propLoading !== null ? propLoading : (standingsData !== null ? false : internalLoading);
   
   // حالات الأدوار الإقصائية
   const [subTab, setSubTab] = useState('groups'); // groups | knockout
@@ -449,69 +475,118 @@ const LeagueStandings = ({ onMatchClick }) => {
     setSubTab('groups');
   }, [activeLeague]);
 
-  // جلب ترتيب المجموعات
+  // جلب ترتيب المجموعات مع تنظيف لمنع تسريب الذاكرة وتداخل الطلبات (فقط إذا لم يتم تمرير البيانات مسبقاً)
   useEffect(() => {
+    if (standingsData !== null) return;
+    let isMounted = true;
     const fetchLeagueStandings = async () => {
-      setLoading(true);
+      setInternalLoading(true);
       try {
         const data = await getStandings(activeLeague);
-        setStandingsGroups(data);
+        if (isMounted) {
+          setInternalStandingsGroups(data);
+        }
       } catch (e) {
-        console.error('Failed to load standings', e);
+        if (isMounted) {
+          console.error('Failed to load standings', e);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setInternalLoading(false);
+        }
       }
     };
     fetchLeagueStandings();
-  }, [activeLeague]);
+    return () => {
+      isMounted = false;
+    };
+  }, [activeLeague, standingsData]);
 
-  // جلب بيانات الأدوار الإقصائية لكأس العالم
+  // جلب بيانات الأدوار الإقصائية لكأس العالم مع تنظيف
   useEffect(() => {
+    let isMounted = true;
     if (activeLeague === 'fifa.world' && subTab === 'knockout') {
       const fetchKnockout = async () => {
         setLoadingKnockout(true);
         try {
           const data = await getWorldCupKnockouts();
-          setKnockoutData(data);
+          if (isMounted) {
+            setKnockoutData(data);
+          }
         } catch (e) {
-          console.error("Failed to load knockout bracket", e);
+          if (isMounted) {
+            console.error("Failed to load knockout bracket", e);
+          }
         } finally {
-          setLoadingKnockout(false);
+          if (isMounted) {
+            setLoadingKnockout(false);
+          }
         }
       };
       fetchKnockout();
     }
+    return () => {
+      isMounted = false;
+    };
   }, [activeLeague, subTab]);
 
   return (
     <div className="standings-container">
-      <div className="d-flex align-center justify-between">
-        <h2 className="section-title" style={{ marginBottom: 0 }}>
-          <Trophy size={22} color="var(--accent)" />
-          ترتيب البطولات والدوريات الكبرى
-        </h2>
-      </div>
+      {showTitle && (
+        <div className="d-flex align-center justify-between">
+          <h2 className="section-title" style={{ marginBottom: 0 }}>
+            <Trophy size={22} color="var(--accent)" />
+            ترتيب البطولات والدوريات الكبرى
+          </h2>
+        </div>
+      )}
 
-      {/* تبويبات اختيار الدوري */}
-      <div className="tabs-container">
-        {leagues.map((league) => (
-          <button
-            key={league.id}
-            className={`tab-btn ${activeLeague === league.id ? 'active' : ''}`}
-            onClick={() => setActiveLeague(league.id)}
-          >
-            <span className="d-flex align-center gap-1">
-              <img 
-                src={league.logo} 
-                alt={league.name} 
-                style={{ width: 18, height: 18, objectFit: 'contain' }} 
-                onError={(e) => e.target.style.display = 'none'}
-              />
-              {league.name}
-            </span>
-          </button>
-        ))}
-      </div>
+      {!hideLeagueSelector && (
+        <>
+          {/* اختيار البطولة في الهواتف الذكية عبر Dropdown موحد */}
+          <div className="standings-mobile-dropdown">
+            <Dropdown
+              options={leagues.map(l => ({ 
+                value: l.id, 
+                label: l.id === 'egypt.1' ? `${l.name} (${EGYPTIAN_BADGE_TEXT})` : l.name, 
+                icon: l.logo 
+              }))}
+              value={activeLeague}
+              onChange={setActiveLeague}
+              icon={<Trophy size={14} color="var(--accent)" />}
+              ariaLabel="اختيار البطولة"
+              fullWidth
+            />
+          </div>
+
+          {/* تبويبات اختيار الدوري */}
+          <div className="tabs-container">
+            {leagues.map((league) => (
+              <button
+                key={league.id}
+                className={`tab-btn ${activeLeague === league.id ? 'active' : ''}`}
+                onClick={() => setActiveLeague(league.id)}
+              >
+                <span className="d-flex align-center gap-1">
+                  <img 
+                    src={league.logo} 
+                    alt={league.name} 
+                    style={{ width: 18, height: 18, objectFit: 'contain' }} 
+                    onError={(e) => e.target.style.display = 'none'}
+                  />
+                  <span>{league.name}</span>
+                  {league.id === 'egypt.1' && <EgyptianBadge style={{ marginRight: 4 }} />}
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* تنبيه البيانات التجريبية للدوري المصري */}
+      {activeLeague === 'egypt.1' && (
+        <EgyptianDisclaimer />
+      )}
 
       {/* تبويبات فرعية لكأس العالم لتحديد دور المجموعات أو الأدوار الاقصائية */}
       {activeLeague === 'fifa.world' && (
@@ -549,9 +624,26 @@ const LeagueStandings = ({ onMatchClick }) => {
       ) : (
         /* جداول الترتيب (دور المجموعات أو الدوريات الأخرى) */
         loading ? (
-          <div className="glass-card empty-state" style={{ padding: '60px 0' }}>
-            <RefreshCw className="empty-icon animate-spin" size={32} style={{ animation: 'spin 1.5s linear infinite' }} />
-            <p>جاري تحميل جدول الترتيب الحالي...</p>
+          <div className="table-responsive">
+            <table className="standings-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 44, textAlign: 'center' }}>#</th>
+                  <th style={{ textAlign: 'right' }}>الفريق</th>
+                  <th style={{ width: 50, textAlign: 'center' }}>لعب</th>
+                  <th style={{ width: 45, textAlign: 'center' }}>فاز</th>
+                  <th style={{ width: 45, textAlign: 'center' }}>تعادل</th>
+                  <th style={{ width: 45, textAlign: 'center' }}>خسر</th>
+                  <th style={{ width: 75, textAlign: 'center' }}>أهداف</th>
+                  <th style={{ width: 60, textAlign: 'center' }}>نقاط</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...Array(8)].map((_, i) => (
+                  <TableRowSkeleton key={i} />
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : standingsGroups.length === 0 ? (
           <div className="glass-card empty-state">
@@ -682,182 +774,6 @@ const LeagueStandings = ({ onMatchClick }) => {
           </div>
         )
       )}
-
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .animate-spin {
-          animation: spin 1s linear infinite;
-        }
-
-        /* تنسيقات التبويبات الفرعية للأدوار الإقصائية */
-        .sub-tab-btn {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid var(--border-color);
-          color: var(--text-secondary);
-          padding: 8px 20px;
-          border-radius: var(--radius-full);
-          font-family: inherit;
-          font-size: 0.85rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all var(--transition-fast);
-        }
-        .sub-tab-btn:hover {
-          background: rgba(255, 255, 255, 0.08);
-          color: var(--text-primary);
-        }
-        .sub-tab-btn.active {
-          background: var(--primary);
-          border-color: var(--primary);
-          color: white;
-          box-shadow: 0 0 12px var(--primary-glow);
-        }
-
-        /* تنسيق مخطط شجرة الإقصائيات */
-        .bracket-scroll-container {
-          overflow-x: auto;
-          width: 100%;
-          padding: 10px 0;
-          direction: ltr; /* الحفاظ على اتجاه الشجرة القياسي من اليسار لليمين */
-          margin-top: 10px;
-        }
-        .bracket-wrapper {
-          display: flex;
-          min-width: 950px;
-          justify-content: space-between;
-          height: 850px;
-          padding: 24px;
-          background: var(--bg-card);
-          border-radius: var(--radius-md);
-          border: 1px solid var(--border-color);
-          backdrop-filter: var(--glass-blur);
-          position: relative;
-        }
-        .bracket-column {
-          display: flex;
-          flex-direction: column;
-          width: 215px;
-        }
-        .column-header {
-          text-align: center;
-          font-weight: 800;
-          color: var(--accent);
-          margin-bottom: 24px;
-          font-size: 0.85rem;
-          border-bottom: 1px solid var(--border-color);
-          padding-bottom: 8px;
-          font-family: 'Cairo', sans-serif;
-          direction: rtl;
-        }
-        .matches-column-flow {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          justify-content: space-around;
-        }
-
-        /* بطاقة مباراة الإقصائيات */
-        .bracket-match-card {
-          background: rgba(11, 15, 23, 0.55);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-sm);
-          padding: 10px 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-          transition: all var(--transition-fast);
-          min-width: 200px;
-          box-shadow: var(--shadow-sm);
-        }
-        .bracket-match-card:hover {
-          border-color: var(--accent);
-          box-shadow: 0 0 12px var(--accent-glow);
-          background: rgba(251, 191, 36, 0.05);
-        }
-        .bracket-match-card.placeholder {
-          justify-content: center;
-          align-items: center;
-          height: 75px;
-          border-style: dashed;
-          background: rgba(255, 255, 255, 0.02);
-        }
-        .bracket-match-card.highlighted {
-          border-color: var(--primary);
-          box-shadow: 0 0 12px var(--primary-glow);
-          background: rgba(16, 185, 129, 0.07);
-        }
-        .bracket-match-card.live-border {
-          border-color: var(--danger);
-          box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
-        }
-        .match-card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 0.65rem;
-          color: var(--text-muted);
-          font-weight: 700;
-        }
-        .live-dot {
-          width: 6px;
-          height: 6px;
-          background: var(--danger);
-          border-radius: 50%;
-        }
-        .bracket-team-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 0.8rem;
-          color: var(--text-secondary);
-          justify-content: space-between;
-        }
-        .bracket-team-row.winner {
-          color: var(--text-primary);
-          font-weight: 700;
-        }
-        .bracket-team-logo {
-          width: 18px;
-          height: 18px;
-          object-fit: contain;
-        }
-        .bracket-team-info {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex: 1;
-          min-width: 0;
-        }
-        .bracket-team-name {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          text-align: left;
-        }
-        .bracket-team-score {
-          font-weight: 700;
-          color: var(--text-primary);
-          font-family: monospace;
-          font-size: 0.9rem;
-        }
-        .special-round-label {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 0.75rem;
-          font-weight: 800;
-          color: var(--accent);
-          margin-bottom: 6px;
-          direction: rtl;
-        }
-        .final-match-wrapper {
-          display: flex;
-          flex-direction: column;
-        }
-      `}</style>
     </div>
   );
 };
