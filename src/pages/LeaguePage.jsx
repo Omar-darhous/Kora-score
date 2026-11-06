@@ -14,6 +14,7 @@ import {
   CalendarDays
 } from 'lucide-react';
 import LeagueStandings from '../components/LeagueStandings';
+import FavoriteButton from '../components/FavoriteButton';
 import { getStandings } from '../services/footballService';
 import { EgyptianDisclaimer, EgyptianBadge } from '../components/EgyptianDisclaimer';
 
@@ -217,6 +218,18 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
 
         {/* أزرار التحويل السريع للجدول الشامل */}
         <div className="league-hero-actions">
+          <FavoriteButton
+            type="league"
+            item={{
+              id: leagueId,
+              name: league.name,
+              country: league.country,
+              logo: league.logo,
+              isMock: leagueId === 'egypt.1'
+            }}
+            size={15}
+            showLabel
+          />
           <Link
             to={`/matches?league=${leagueId}`}
             className="league-action-link"
@@ -484,7 +497,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
                                 </div>
                               )}
 
-                              <div className="league-team-card-info">
+                              <div className="league-team-card-info" style={{ flex: 1 }}>
                                 <span className="league-team-card-name" title={team.team}>
                                   {team.team}
                                 </span>
@@ -492,6 +505,22 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
                                   لعب: {team.played} | فاز: {team.win} | تعادل: {team.draw}
                                 </span>
                               </div>
+
+                              {hasValidTeamId && (
+                                <FavoriteButton
+                                  type="team"
+                                  item={{
+                                    id: team.teamId,
+                                    name: team.team,
+                                    arabicName: team.team,
+                                    leagueId,
+                                    leagueName: league.name,
+                                    logo: team.logo,
+                                    isMock: leagueId === 'egypt.1'
+                                  }}
+                                  size={16}
+                                />
+                              )}
                             </div>
 
                             <div className="league-team-card-bottom">

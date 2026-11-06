@@ -1,12 +1,16 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Sun, Moon, Settings, Trophy, Calendar, Radio, Newspaper, Search } from 'lucide-react';
+import { Sun, Moon, Settings, Trophy, Calendar, Radio, Newspaper, Search, Star } from 'lucide-react';
+import { useFavorites } from '../context/FavoritesContext';
 
 const Header = ({ theme, toggleTheme, onOpenSettings, onOpenSearch }) => {
+  const { totalFavoritesCount } = useFavorites();
+
   const menuItems = [
     { id: 'live', path: '/', label: 'المباشر واليوم', icon: Radio, end: true },
     { id: 'matches', path: '/matches', label: 'المباريات', icon: Calendar },
     { id: 'standings', path: '/standings', label: 'الترتيب', icon: Trophy },
+    { id: 'favorites', path: '/favorites', label: 'المفضلة', icon: Star, badge: totalFavoritesCount },
     { id: 'news', path: '/news', label: 'الأخبار', icon: Newspaper },
   ];
 
@@ -64,6 +68,9 @@ const Header = ({ theme, toggleTheme, onOpenSettings, onOpenSearch }) => {
                     <>
                       <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
                       <span>{item.label}</span>
+                      {item.badge > 0 && (
+                        <span className="nav-fav-badge">{item.badge}</span>
+                      )}
                     </>
                   )}
                 </NavLink>
@@ -120,7 +127,12 @@ const Header = ({ theme, toggleTheme, onOpenSettings, onOpenSearch }) => {
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  <div className="bottom-nav-icon-wrap">
+                    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                    {item.badge > 0 && (
+                      <span className="bottom-nav-badge">{item.badge}</span>
+                    )}
+                  </div>
                   <span>{item.label}</span>
                 </>
               )}

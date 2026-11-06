@@ -17,9 +17,11 @@ import NewsPage from './pages/NewsPage';
 import MatchPage from './pages/MatchPage';
 import LeaguePage from './pages/LeaguePage';
 import TeamPage from './pages/TeamPage';
+import FavoritesPage from './pages/FavoritesPage';
 import NotFoundPage from './pages/NotFoundPage';
 
-// استيراد الخدمات
+// استيراد سياق المفضلة والخدمات
+import { FavoritesProvider } from './context/FavoritesContext';
 import { getMatches, getLeagues, subscribeToLiveMatches } from './services/footballService';
 
 // مساعدة للحصول على تاريخ اليوم منسق كـ YYYYMMDD
@@ -156,8 +158,14 @@ function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
+  const triggerFeedback = (msg) => {
+    setFeedbackToast(msg);
+    setTimeout(() => setFeedbackToast(null), 3500);
+  };
+
   return (
-    <div className="app-container">
+    <FavoritesProvider onNotify={triggerFeedback}>
+      <div className="app-container">
       {/* إشعار هدف مباشر بنمط البث التلفزيوني الرياضي */}
       <AnimatePresence>
         {goalToast && (
@@ -264,6 +272,17 @@ function App() {
           <Route
             path="/news"
             element={<NewsPage />}
+          />
+
+          <Route
+            path="/favorites"
+            element={
+              <FavoritesPage
+                matches={matches}
+                leagues={leagues}
+                onMatchClick={handleMatchClick}
+              />
+            }
           />
 
           <Route
@@ -376,7 +395,8 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </FavoritesProvider>
   );
 }
 

@@ -8,13 +8,17 @@ import {
   Shield,
   Calendar,
   Clock,
-  CornerDownLeft
+  CornerDownLeft,
+  Star
 } from 'lucide-react';
 import { searchAll, getQuickSuggestions } from '../services/searchService';
+import { useFavorites } from '../context/FavoritesContext';
+import FavoriteButton from './FavoriteButton';
 import { EgyptianBadge } from './EgyptianDisclaimer';
 
 const SearchModal = ({ isOpen, onClose, matches = [], leagues = [], onMatchClick }) => {
   const navigate = useNavigate();
+  const { favoriteLeagues, favoriteTeams, totalFavoritesCount } = useFavorites();
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
@@ -207,6 +211,73 @@ const SearchModal = ({ isOpen, onClose, matches = [], leagues = [], onMatchClick
           {!hasQuery ? (
             /* الحالة الأولية قبل الكتابة: اقتراحات سريعة */
             <div className="search-suggestions-container">
+              {/* مفضلة المستخدم السريعة إن وجدت */}
+              {totalFavoritesCount > 0 && (
+                <div className="search-section">
+                  <div className="search-section-header">
+                    <Star size={14} color="var(--accent)" fill="var(--accent)" />
+                    <span>مفضلتك السريعة ({totalFavoritesCount})</span>
+                  </div>
+                  <div className="search-quick-grid">
+                    {favoriteLeagues.map((league) => (
+                      <button
+                        key={`fav-l-${league.id}`}
+                        type="button"
+                        className="search-quick-card"
+                        onClick={() => {
+                          navigate(`/league/${league.id}`);
+                          onClose();
+                        }}
+                      >
+                        {league.logo ? (
+                          <img
+                            src={league.logo}
+                            alt={league.name}
+                            className="search-quick-logo"
+                            onError={(e) => (e.target.style.display = 'none')}
+                          />
+                        ) : (
+                          <Trophy size={16} color="var(--accent)" />
+                        )}
+                        <div className="d-flex align-center gap-1 flex-wrap">
+                          <span className="search-quick-name">{league.name}</span>
+                          {league.isMock && <EgyptianBadge style={{ fontSize: '0.65rem' }} />}
+                        </div>
+                      </button>
+                    ))}
+                    {favoriteTeams.map((team) => (
+                      <button
+                        key={`fav-t-${team.id}`}
+                        type="button"
+                        className="search-quick-card"
+                        onClick={() => {
+                          const q = team.leagueId ? `?league=${team.leagueId}` : '';
+                          navigate(`/team/${team.id}${q}`);
+                          onClose();
+                        }}
+                      >
+                        {team.logo ? (
+                          <img
+                            src={team.logo}
+                            alt={team.arabicName || team.name}
+                            className="search-quick-logo"
+                            onError={(e) => (e.target.style.display = 'none')}
+                          />
+                        ) : (
+                          <div className="search-quick-placeholder">
+                            {(team.arabicName || team.name).charAt(0)}
+                          </div>
+                        )}
+                        <div className="d-flex align-center gap-1 flex-wrap">
+                          <span className="search-quick-name">{team.arabicName || team.name}</span>
+                          {team.isMock && <EgyptianBadge style={{ fontSize: '0.65rem' }} />}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* البطولات الشائعة */}
               <div className="search-section">
                 <div className="search-section-header">
@@ -329,6 +400,11 @@ const SearchModal = ({ isOpen, onClose, matches = [], leagues = [], onMatchClick
                             </span>
                           </div>
                           <div className="search-item-action">
+                            <FavoriteButton
+                              type="league"
+                              item={league}
+                              size={15}
+                            />
                             <span className="search-item-tag">بطولة</span>
                             <CornerDownLeft size={14} className="search-enter-icon" />
                           </div>
@@ -386,6 +462,11 @@ const SearchModal = ({ isOpen, onClose, matches = [], leagues = [], onMatchClick
                             </span>
                           </div>
                           <div className="search-item-action">
+                            <FavoriteButton
+                              type="team"
+                              item={team}
+                              size={15}
+                            />
                             <span className="search-item-tag">فريق</span>
                             <CornerDownLeft size={14} className="search-enter-icon" />
                           </div>

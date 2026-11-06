@@ -24,6 +24,7 @@ import {
   getTeamRoster,
   getStandings
 } from '../services/footballService';
+import FavoriteButton from '../components/FavoriteButton';
 import { EgyptianDisclaimer, EgyptianBadge } from '../components/EgyptianDisclaimer';
 
 const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
@@ -511,6 +512,20 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
 
         {/* أزرار الإجراءات السريعة في بطاقة الهوية */}
         <div className="team-hero-actions">
+          <FavoriteButton
+            type="team"
+            item={{
+              id: teamId,
+              name: teamName,
+              arabicName: teamName,
+              leagueId: resolvedLeagueId || (isEgyptian ? 'egypt.1' : ''),
+              leagueName: league?.name || (isEgyptian ? 'الدوري المصري الممتاز' : ''),
+              logo: teamLogo,
+              isMock: isEgyptian
+            }}
+            size={15}
+            showLabel
+          />
           {resolvedLeagueId && (
             <Link
               to={`/league/${resolvedLeagueId}`}

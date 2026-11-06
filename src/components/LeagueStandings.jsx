@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, RefreshCw, Star } from 'lucide-react';
 import { getStandings, getLeagues, getWorldCupKnockouts } from '../services/footballService';
 import { TableRowSkeleton } from './Skeleton';
 import Dropdown from './Dropdown';
+import FavoriteButton from './FavoriteButton';
 import { EgyptianDisclaimer, EgyptianBadge, EGYPTIAN_BADGE_TEXT } from './EgyptianDisclaimer';
 
 // دالة لتصنيف المراكز حسب البطولة وتحديد لون الهامش الأيمن والتسمية
@@ -530,14 +532,39 @@ const LeagueStandings = ({
     };
   }, [activeLeague, subTab]);
 
+  const currentLeagueObj = leagues.find((l) => l.id === activeLeague);
+
   return (
     <div className="standings-container">
       {showTitle && (
-        <div className="d-flex align-center justify-between">
+        <div className="d-flex align-center justify-between flex-wrap gap-2">
           <h2 className="section-title" style={{ marginBottom: 0 }}>
             <Trophy size={22} color="var(--accent)" />
             ترتيب البطولات والدوريات الكبرى
           </h2>
+          {currentLeagueObj && (
+            <div className="d-flex align-center gap-2">
+              <FavoriteButton
+                type="league"
+                item={{
+                  id: currentLeagueObj.id,
+                  name: currentLeagueObj.name,
+                  country: currentLeagueObj.country,
+                  logo: currentLeagueObj.logo,
+                  isMock: currentLeagueObj.id === 'egypt.1'
+                }}
+                size={15}
+                showLabel
+              />
+              <Link
+                to={`/league/${currentLeagueObj.id}`}
+                className="league-action-link secondary"
+                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+              >
+                <span>صفحة البطولة</span>
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
@@ -715,17 +742,49 @@ const LeagueStandings = ({
                               </span>
                             </td>
                             <td style={{ textAlign: 'right' }}>
-                              <div className="team-cell">
-                                {team.logo && (
-                                  <img 
-                                    src={team.logo} 
-                                    alt={team.team} 
-                                    className="team-logo" 
-                                    style={{ width: 24, height: 24 }} 
-                                    onError={(e) => e.target.style.display = 'none'}
+                              <div className="team-cell" style={{ justifyContent: 'space-between', width: '100%' }}>
+                                <div className="d-flex align-center gap-2" style={{ minWidth: 0 }}>
+                                  {team.logo && (
+                                    <img
+                                      src={team.logo}
+                                      alt={team.team}
+                                      className="team-logo"
+                                      style={{ width: 24, height: 24, flexShrink: 0 }}
+                                      onError={(e) => e.target.style.display = 'none'}
+                                    />
+                                  )}
+                                  {team.teamId ? (
+                                    <Link
+                                      to={`/team/${team.teamId}?league=${activeLeague}`}
+                                      state={{ leagueId: activeLeague, team }}
+                                      className="standings-team-link"
+                                      style={{
+                                        fontWeight: team.rank === 1 ? 700 : 600,
+                                        color: 'var(--text-primary)',
+                                        textDecoration: 'none'
+                                      }}
+                                    >
+                                      {team.team}
+                                    </Link>
+                                  ) : (
+                                    <span style={{ fontWeight: team.rank === 1 ? 700 : 'normal' }}>{team.team}</span>
+                                  )}
+                                </div>
+                                {team.teamId && (
+                                  <FavoriteButton
+                                    type="team"
+                                    item={{
+                                      id: team.teamId,
+                                      name: team.team,
+                                      arabicName: team.team,
+                                      leagueId: activeLeague,
+                                      leagueName: currentLeagueObj?.name || '',
+                                      logo: team.logo,
+                                      isMock: activeLeague === 'egypt.1'
+                                    }}
+                                    size={14}
                                   />
                                 )}
-                                <span style={{ fontWeight: team.rank === 1 ? 700 : 'normal' }}>{team.team}</span>
                               </div>
                             </td>
                             <td className="stat-cell">{team.played}</td>
