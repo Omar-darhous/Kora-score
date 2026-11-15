@@ -4,6 +4,9 @@ import MatchSchedule from '../components/MatchSchedule';
 
 const HomePage = ({
   matches,
+  matchesLoading,
+  matchesError,
+  onRetryMatches,
   selectedDateStr,
   setSelectedDateStr,
   selectedLeague,
@@ -15,10 +18,16 @@ const HomePage = ({
     <>
       <LiveMatches
         matches={matches}
+        loading={matchesLoading}
+        error={matchesError}
+        onRetry={onRetryMatches}
         onMatchClick={onMatchClick}
       />
       <MatchSchedule
         matches={matches}
+        loading={matchesLoading}
+        error={matchesError}
+        onRetry={onRetryMatches}
         selectedDateStr={selectedDateStr}
         setSelectedDateStr={setSelectedDateStr}
         selectedLeague={selectedLeague}

@@ -4,6 +4,9 @@ import MatchSchedule from '../components/MatchSchedule';
 
 const MatchesPage = ({
   matches,
+  matchesLoading,
+  matchesError,
+  onRetryMatches,
   selectedDateStr,
   setSelectedDateStr,
   selectedLeague,
@@ -53,6 +56,9 @@ const MatchesPage = ({
   return (
     <MatchSchedule
       matches={matches}
+        loading={matchesLoading}
+        error={matchesError}
+        onRetry={onRetryMatches}
       selectedDateStr={selectedDateStr}
       setSelectedDateStr={handleDateChange}
       selectedLeague={selectedLeague}

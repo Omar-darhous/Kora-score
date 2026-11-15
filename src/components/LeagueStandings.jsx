@@ -1,8 +1,11 @@
+import KnockoutBracket from './KnockoutBracket';
+import { isTournament, qualification } from '../services/tournamentRules';
+import RequestState from './RequestState';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Trophy, RefreshCw, Star } from 'lucide-react';
-import { getStandings, getLeagues, getWorldCupKnockouts } from '../services/footballService';
+import { Trophy, RefreshCw } from 'lucide-react';
+import { getStandings, getLeagues, getTournamentKnockouts } from '../services/footballService';
 import { TableRowSkeleton } from './Skeleton';
 import Dropdown from './Dropdown';
 import FavoriteButton from './FavoriteButton';
@@ -10,19 +13,6 @@ import { EgyptianDisclaimer, EgyptianBadge, EGYPTIAN_BADGE_TEXT } from './Egypti
 
 // دالة لتصنيف المراكز حسب البطولة وتحديد لون الهامش الأيمن والتسمية
 const getRankStyleAndText = (leagueId, rank) => {
-  // دوريات أبطال القارات والهبوط
-  if (leagueId === 'fifa.world' || leagueId === 'uefa.champions' || leagueId === 'uefa.europa') {
-    if (rank <= 2) {
-      return {
-        color: '#10b981', // أخضر للتأهل
-        bg: 'rgba(16, 185, 129, 0.1)',
-        borderRight: '4px solid #10b981',
-        label: 'تأهل إلى الدور التالي'
-      };
-    }
-    return null;
-  }
-
   // الدوري الإنجليزي، الإسباني، الإيطالي
   if (leagueId === 'eng.1' || leagueId === 'esp.1' || leagueId === 'ita.1') {
     if (rank <= 4) {
@@ -254,191 +244,6 @@ const getLegendItems = (leagueId) => {
 };
 
 // مكون بطاقة المباراة في شجرة الأدوار الإقصائية
-const BracketMatchCard = ({ match, onMatchClick, round, index, hoverState, setHoverState }) => {
-  if (!match) {
-    return (
-      <div className="bracket-match-card placeholder">
-        <span className="text-muted" style={{ fontSize: '0.75rem' }}>مباراة لم تحدد بعد</span>
-      </div>
-    );
-  }
-
-  const isFT = match.status === 'FT';
-  const isLive = match.status === 'LIVE';
-  
-  // التحقق من الفريق الفائز
-  const isHomeWinner = isFT && match.homeScore > match.awayScore;
-  const isAwayWinner = isFT && match.awayScore > match.homeScore;
-
-  // إدارة تظليل مسار الفريق عند تمرير مؤشر الفأرة
-  const handleMouseEnter = () => {
-    setHoverState({ round, index, homeTeam: match.homeTeam, awayTeam: match.awayTeam });
-  };
-  const handleMouseLeave = () => {
-    setHoverState(null);
-  };
-
-  // التحقق من تظليل المسار
-  let isHighlighted = false;
-  if (hoverState) {
-    if (match.homeTeam.includes(hoverState.homeTeam) || match.homeTeam.includes(hoverState.awayTeam) ||
-        match.awayTeam.includes(hoverState.homeTeam) || match.awayTeam.includes(hoverState.awayTeam)) {
-      isHighlighted = true;
-    }
-  }
-
-  return (
-    <motion.div
-      className={`bracket-match-card ${isHighlighted ? 'highlighted' : ''} ${isLive ? 'live-border' : ''}`}
-      onClick={() => onMatchClick && onMatchClick(match)}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      whileHover={{ scale: 1.02, translateY: -2 }}
-      transition={{ duration: 0.15 }}
-      style={{ cursor: 'pointer' }}
-    >
-      <div className="match-card-header">
-        <span className="match-round-tag">
-          {isLive ? (
-            <>مباشر <bdi>{String(match.minute || '').replace(/['"’`]/g, '').trim()}</bdi> د</>
-          ) : isFT ? 'انتهت' : match.time}
-        </span>
-        {isLive && <span className="live-dot animate-pulse"></span>}
-      </div>
-      
-      <div className="match-card-body d-flex flex-column gap-1">
-        {/* الفريق المستضيف */}
-        <div className={`bracket-team-row ${isHomeWinner ? 'winner' : ''}`}>
-          <div className="bracket-team-info">
-            {match.homeLogo && (
-              <img src={match.homeLogo} alt={match.homeTeam} className="bracket-team-logo" onError={(e) => e.target.style.display = 'none'} />
-            )}
-            <span className="bracket-team-name">{match.homeTeam}</span>
-          </div>
-          <span className="bracket-team-score">{match.homeScore}</span>
-        </div>
-        
-        {/* الفريق الضيف */}
-        <div className={`bracket-team-row ${isAwayWinner ? 'winner' : ''}`}>
-          <div className="bracket-team-info">
-            {match.awayLogo && (
-              <img src={match.awayLogo} alt={match.awayTeam} className="bracket-team-logo" onError={(e) => e.target.style.display = 'none'} />
-            )}
-            <span className="bracket-team-name">{match.awayTeam}</span>
-          </div>
-          <span className="bracket-team-score">{match.awayScore}</span>
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-// مكون شجرة الأدوار الإقصائية
-const KnockoutBracket = ({ bracketData, onMatchClick, hoverState, setHoverState }) => {
-  if (!bracketData) {
-    return (
-      <div className="glass-card empty-state" style={{ padding: '60px 0' }}>
-        <p>لم نتمكن من العثور على بيانات الأدوار الإقصائية حالياً.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bracket-scroll-container">
-      <div className="bracket-wrapper">
-        {/* العمود الأول: دور الـ 16 */}
-        <div className="bracket-column">
-          <div className="column-header">دور الـ 16 (1/8)</div>
-          <div className="matches-column-flow">
-            {bracketData.r16.map((match, idx) => (
-              <BracketMatchCard 
-                key={idx} 
-                match={match} 
-                onMatchClick={onMatchClick} 
-                round="r16" 
-                index={idx} 
-                hoverState={hoverState} 
-                setHoverState={setHoverState} 
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* العمود الثاني: ربع النهائي */}
-        <div className="bracket-column">
-          <div className="column-header">ربع النهائي (1/4)</div>
-          <div className="matches-column-flow">
-            {bracketData.qf.map((match, idx) => (
-              <BracketMatchCard 
-                key={idx} 
-                match={match} 
-                onMatchClick={onMatchClick} 
-                round="qf" 
-                index={idx} 
-                hoverState={hoverState} 
-                setHoverState={setHoverState} 
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* العمود الثالث: نصف النهائي */}
-        <div className="bracket-column">
-          <div className="column-header">نصف النهائي (1/2)</div>
-          <div className="matches-column-flow">
-            {bracketData.sf.map((match, idx) => (
-              <BracketMatchCard 
-                key={idx} 
-                match={match} 
-                onMatchClick={onMatchClick} 
-                round="sf" 
-                index={idx} 
-                hoverState={hoverState} 
-                setHoverState={setHoverState} 
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* العمود الرابع: النهائي والمركز الثالث */}
-        <div className="bracket-column">
-          <div className="column-header">النهائي والمركز الثالث</div>
-          <div className="matches-column-flow" style={{ justifyContent: 'center', gap: '80px' }}>
-            <div className="final-match-wrapper">
-              <span className="special-round-label">
-                <Star size={12} color="var(--accent)" fill="var(--accent)" />
-                المباراة النهائية
-              </span>
-              <BracketMatchCard 
-                match={bracketData.final} 
-                onMatchClick={onMatchClick} 
-                round="final" 
-                index={0} 
-                hoverState={hoverState} 
-                setHoverState={setHoverState} 
-              />
-            </div>
-
-            <div className="final-match-wrapper">
-              <span className="special-round-label" style={{ color: 'var(--text-secondary)' }}>
-                تحديد المركز الثالث
-              </span>
-              <BracketMatchCard 
-                match={bracketData.thirdPlace} 
-                onMatchClick={onMatchClick} 
-                round="third" 
-                index={0} 
-                hoverState={hoverState} 
-                setHoverState={setHoverState} 
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const LeagueStandings = ({
   onMatchClick,
   activeLeague: propActiveLeague,
@@ -462,6 +267,8 @@ const LeagueStandings = ({
 
   const [internalStandingsGroups, setInternalStandingsGroups] = useState([]);
   const [internalLoading, setInternalLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const standingsGroups = standingsData !== null ? standingsData : internalStandingsGroups;
   const loading = propLoading !== null ? propLoading : (standingsData !== null ? false : internalLoading);
@@ -470,7 +277,9 @@ const LeagueStandings = ({
   const [subTab, setSubTab] = useState('groups'); // groups | knockout
   const [knockoutData, setKnockoutData] = useState(null);
   const [loadingKnockout, setLoadingKnockout] = useState(false);
-  const [hoverState, setHoverState] = useState(null);
+  const [knockoutError, setKnockoutError] = useState(null);
+  const [knockoutRetry, setKnockoutRetry] = useState(0);
+  const seasonYear = standingsGroups[0]?.season?.year;
 
   // مزامنة التبويب الفرعي عند تغيير البطولة
   useEffect(() => {
@@ -483,14 +292,16 @@ const LeagueStandings = ({
     let isMounted = true;
     const fetchLeagueStandings = async () => {
       setInternalLoading(true);
+      setError(null);
       try {
-        const data = await getStandings(activeLeague);
+        const data = await getStandings(activeLeague, { strict: true });
         if (isMounted) {
           setInternalStandingsGroups(data);
         }
       } catch (e) {
         if (isMounted) {
           console.error('Failed to load standings', e);
+          setError('تعذر تحميل جدول الترتيب. أعد المحاولة.');
         }
       } finally {
         if (isMounted) {
@@ -502,35 +313,27 @@ const LeagueStandings = ({
     return () => {
       isMounted = false;
     };
-  }, [activeLeague, standingsData]);
+  }, [activeLeague, standingsData, retryCount]);
 
-  // جلب بيانات الأدوار الإقصائية لكأس العالم مع تنظيف
   useEffect(() => {
-    let isMounted = true;
-    if (activeLeague === 'fifa.world' && subTab === 'knockout') {
-      const fetchKnockout = async () => {
-        setLoadingKnockout(true);
-        try {
-          const data = await getWorldCupKnockouts();
-          if (isMounted) {
-            setKnockoutData(data);
-          }
-        } catch (e) {
-          if (isMounted) {
-            console.error("Failed to load knockout bracket", e);
-          }
-        } finally {
-          if (isMounted) {
-            setLoadingKnockout(false);
-          }
-        }
-      };
-      fetchKnockout();
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [activeLeague, subTab]);
+    let active = true;
+    setKnockoutData(null);
+    setKnockoutError(null);
+    if (!isTournament(activeLeague) || !seasonYear) return;
+    setLoadingKnockout(true);
+    getTournamentKnockouts(activeLeague, seasonYear).then(data => {
+      if (active) setKnockoutData(data);
+    }).catch(() => {
+      if (active) setKnockoutError('تعذر تحميل مواجهات الموسم. أعد المحاولة.');
+    }).finally(() => { if (active) setLoadingKnockout(false); });
+    return () => { active = false; };
+  }, [activeLeague, seasonYear, knockoutRetry]);
+  const getZone = team => isTournament(activeLeague)
+    ? qualification(activeLeague, team, standingsGroups, knockoutData)
+    : getRankStyleAndText(activeLeague, team.rank);
+  const legend = isTournament(activeLeague)
+    ? [...new Map(standingsGroups.flatMap(g => g.entries).map(getZone).filter(Boolean).map(z => [z.label, z])).values()]
+    : getLegendItems(activeLeague);
 
   const currentLeagueObj = leagues.find((l) => l.id === activeLeague);
 
@@ -616,36 +419,41 @@ const LeagueStandings = ({
       )}
 
       {/* تبويبات فرعية لكأس العالم لتحديد دور المجموعات أو الأدوار الاقصائية */}
-      {activeLeague === 'fifa.world' && (
+      {isTournament(activeLeague) && (
         <div className="d-flex align-center justify-center gap-2" style={{ margin: '8px 0 16px 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
           <button
             className={`sub-tab-btn ${subTab === 'groups' ? 'active' : ''}`}
             onClick={() => setSubTab('groups')}
           >
-            دور المجموعات (الترتيب)
+            ترتيب البطولة
           </button>
           <button
             className={`sub-tab-btn ${subTab === 'knockout' ? 'active' : ''}`}
             onClick={() => setSubTab('knockout')}
           >
-            الأدوار الإقصائية (المخطط)
+            الأدوار الإقصائية
           </button>
         </div>
       )}
 
+      {isTournament(activeLeague) && <div className="glass-card request-state" role="note">
+        <strong>{standingsGroups[0]?.season?.displayName || 'موسم البطولة'}</strong>
+        <p>{activeLeague === 'fifa.world' && Number(seasonYear) === 2026 ? 'يتأهل أول وثاني كل مجموعة وأفضل 8 ثوالث إلى دور الـ32. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ32 المنشورة.' : activeLeague.startsWith('uefa.') && Number(seasonYear) >= 2024 ? 'المراكز 1–8 إلى دور الـ16، والمراكز 9–24 إلى الملحق. المراكز الحالية لا تعني ضمان التأهل قبل اكتمال مرحلة الدوري.' : 'تُعرض قواعد التأهل وفق موسم البطولة المتاح.'}</p>
+        {knockoutError && subTab === 'groups' && <button type="button" className="tab-btn" onClick={() => setKnockoutRetry(n => n + 1)}>تعذر التحقق من المتأهلين — إعادة المحاولة</button>}
+      </div>}
       {/* المحتوى الرئيسي */}
-      {activeLeague === 'fifa.world' && subTab === 'knockout' ? (
-        loadingKnockout ? (
+      {isTournament(activeLeague) && subTab === 'knockout' ? (
+        loadingKnockout || loading ? (
           <div className="glass-card empty-state" style={{ padding: '60px 0' }}>
             <RefreshCw className="empty-icon animate-spin" size={32} style={{ animation: 'spin 1.5s linear infinite' }} />
-            <p>جاري تحميل مخطط الأدوار الإقصائية لكأس العالم...</p>
+            <p>جارٍ تحميل مواجهات الموسم...</p>
           </div>
+        ) : knockoutError ? (
+          <RequestState message={knockoutError} onRetry={() => setKnockoutRetry(n => n + 1)} />
         ) : (
-          <KnockoutBracket 
+          <KnockoutBracket key={activeLeague + seasonYear}
             bracketData={knockoutData} 
             onMatchClick={onMatchClick} 
-            hoverState={hoverState} 
-            setHoverState={setHoverState} 
           />
         )
       ) : (
@@ -672,6 +480,8 @@ const LeagueStandings = ({
               </tbody>
             </table>
           </div>
+        ) : error && standingsData === null ? (
+          <RequestState message={error} onRetry={() => setRetryCount(value => value + 1)} />
         ) : standingsGroups.length === 0 ? (
           <div className="glass-card empty-state">
             <p>لم نتمكن من العثور على جداول الترتيب لهذه البطولة حالياً.</p>
@@ -712,7 +522,7 @@ const LeagueStandings = ({
                     </thead>
                     <tbody>
                       {group.entries.map((team, idx) => {
-                        const zone = getRankStyleAndText(activeLeague, team.rank);
+                        const zone = getZone(team);
                         return (
                           <motion.tr
                             key={team.team}
@@ -765,6 +575,7 @@ const LeagueStandings = ({
                                       }}
                                     >
                                       {team.team}
+                                      {isTournament(activeLeague) && zone && <small className="qualification-label" style={{ color: zone.color }}>{zone.label}</small>}
                                     </Link>
                                   ) : (
                                     <span style={{ fontWeight: team.rank === 1 ? 700 : 'normal' }}>{team.team}</span>
@@ -802,7 +613,7 @@ const LeagueStandings = ({
                   </table>
 
                   {/* دليل الألوان والمراكز التأهيلية والهبوط في أسفل جدول كل دوري */}
-                  {getLegendItems(activeLeague).length > 0 && (
+                  {legend.length > 0 && (
                     <div className="standings-legend" style={{ 
                       display: 'flex', 
                       flexWrap: 'wrap', 
@@ -813,7 +624,7 @@ const LeagueStandings = ({
                       fontSize: '0.75rem',
                       fontWeight: 500
                     }}>
-                      {getLegendItems(activeLeague).map((item, idx) => (
+                      {legend.map((item, idx) => (
                         <div key={idx} className="d-flex align-center gap-1">
                           <span style={{ 
                             display: 'inline-block', 

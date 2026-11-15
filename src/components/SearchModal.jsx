@@ -1,3 +1,4 @@
+import { finishedMatchLabel } from '../services/matchResult';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -507,7 +508,7 @@ const SearchModal = ({ isOpen, onClose, matches = [], leagues = [], onMatchClick
                               {match.isMock && <EgyptianBadge />}
                             </div>
                             <span className="search-item-subtitle">
-                              {match.leagueName} • {match.status === 'LIVE' ? `مباشر (${match.minute} د)` : match.status === 'FT' ? `انتهت (${match.homeScore} - ${match.awayScore})` : match.time}
+                              {match.leagueName} • {match.status === 'LIVE' ? `مباشر (${match.minute} د)` : match.status === 'FT' ? `${finishedMatchLabel(match)} (${match.homeScore} - ${match.awayScore})` : match.time}
                             </span>
                           </div>
                           <div className="search-item-action">

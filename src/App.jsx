@@ -1,24 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Flame, AlertCircle } from 'lucide-react';
 
 // استيراد المكونات المشتركة
 import Header from './components/Header';
-import MatchModalRoute from './components/MatchModalRoute';
+import PageBoundary from './components/PageBoundary';
+const MatchModalRoute = lazy(() => import('./components/MatchModalRoute'));
 import ApiSettingsModal from './components/ApiSettingsModal';
 import SearchModal from './components/SearchModal';
 
 // استيراد صفحات المسارات
 import HomePage from './pages/HomePage';
-import MatchesPage from './pages/MatchesPage';
-import StandingsPage from './pages/StandingsPage';
-import NewsPage from './pages/NewsPage';
-import MatchPage from './pages/MatchPage';
-import LeaguePage from './pages/LeaguePage';
-import TeamPage from './pages/TeamPage';
-import FavoritesPage from './pages/FavoritesPage';
-import NotFoundPage from './pages/NotFoundPage';
+const MatchesPage = lazy(() => import('./pages/MatchesPage'));
+const StandingsPage = lazy(() => import('./pages/StandingsPage'));
+const NewsPage = lazy(() => import('./pages/NewsPage'));
+const MatchPage = lazy(() => import('./pages/MatchPage'));
+const LeaguePage = lazy(() => import('./pages/LeaguePage'));
+const TeamPage = lazy(() => import('./pages/TeamPage'));
+const FavoritesPage = lazy(() => import('./pages/FavoritesPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 // استيراد سياق المفضلة والخدمات
 import { FavoritesProvider } from './context/FavoritesContext';
@@ -43,6 +44,11 @@ function App() {
   });
 
   const [matches, setMatches] = useState([]);
+  const [matchesLoading, setMatchesLoading] = useState(true);
+  const [matchesError, setMatchesError] = useState(null);
+  const [matchesWarning, setMatchesWarning] = useState(false);
+  const [matchesRetry, setMatchesRetry] = useState(0);
+  const retryMatches = () => setMatchesRetry(value => value + 1);
   const [leagues, setLeagues] = useState([]);
   const [selectedDateStr, setSelectedDateStr] = useState(getTodayDateStr);
   const [selectedLeague, setSelectedLeague] = useState('all');
@@ -77,16 +83,25 @@ function App() {
 
   // جلب المباريات عند تغيير التاريخ
   useEffect(() => {
+    let active = true;
+    setMatchesLoading(true);
+    setMatchesError(null);
+    setMatchesWarning(false);
+    setMatches([]);
     const loadMatches = async () => {
       try {
-        const data = await getMatches(selectedDateStr);
-        setMatches(data);
+        const data = await getMatches(selectedDateStr, { strict: true, forceRefresh: matchesRetry > 0, onPartial: () => { if (active) setMatchesWarning(true); } });
+        if (active) setMatches(data);
       } catch (e) {
         console.error('Failed to load matches for date:', e);
+        if (active) setMatchesError('تعذر تحميل جدول المباريات بالكامل. تحقق من الاتصال وأعد المحاولة.');
+      } finally {
+        if (active) setMatchesLoading(false);
       }
     };
     loadMatches();
-  }, [selectedDateStr]);
+    return () => { active = false; };
+  }, [selectedDateStr, matchesRetry]);
 
   // الاشتراك في تحديثات المباريات المباشرة الحقيقية للـ "اليوم"
   useEffect(() => {
@@ -233,12 +248,17 @@ function App() {
       />
 
       <main className="main-content">
+        {matchesWarning && !matchesLoading && <div className="glass-card request-state" role="status">بعض البطولات لم يتم تحميلها؛ النتائج المعروضة قد تكون غير مكتملة. <button type="button" className="tab-btn" onClick={retryMatches}>إعادة المحاولة</button></div>}
+        <PageBoundary key={(backgroundLocation || location).pathname}>
         <Routes location={backgroundLocation || location}>
           <Route
             path="/"
             element={
               <HomePage
                 matches={matches}
+                matchesLoading={matchesLoading}
+                matchesError={matchesError}
+                onRetryMatches={retryMatches}
                 selectedDateStr={selectedDateStr}
                 setSelectedDateStr={setSelectedDateStr}
                 selectedLeague={selectedLeague}
@@ -254,6 +274,9 @@ function App() {
             element={
               <MatchesPage
                 matches={matches}
+                matchesLoading={matchesLoading}
+                matchesError={matchesError}
+                onRetryMatches={retryMatches}
                 selectedDateStr={selectedDateStr}
                 setSelectedDateStr={setSelectedDateStr}
                 selectedLeague={selectedLeague}
@@ -279,6 +302,9 @@ function App() {
             element={
               <FavoritesPage
                 matches={matches}
+                matchesLoading={matchesLoading}
+                matchesError={matchesError}
+                onRetryMatches={retryMatches}
                 leagues={leagues}
                 onMatchClick={handleMatchClick}
               />
@@ -290,6 +316,9 @@ function App() {
             element={
               <LeaguePage
                 matches={matches}
+                matchesLoading={matchesLoading}
+                matchesError={matchesError}
+                onRetryMatches={retryMatches}
                 leagues={leagues}
                 onMatchClick={handleMatchClick}
               />
@@ -301,6 +330,9 @@ function App() {
             element={
               <TeamPage
                 matches={matches}
+                matchesLoading={matchesLoading}
+                matchesError={matchesError}
+                onRetryMatches={retryMatches}
                 leagues={leagues}
                 onMatchClick={handleMatchClick}
               />
@@ -317,6 +349,7 @@ function App() {
             element={<NotFoundPage />}
           />
         </Routes>
+        </PageBoundary>
       </main>
 
       <footer className="app-footer">
@@ -328,6 +361,7 @@ function App() {
 
       {/* نافذة تفاصيل المباراة عند التصفح الداخلي عبر Background Location */}
       {backgroundLocation && (
+        <PageBoundary key={location.pathname} onClose={() => navigate(-1)}>
         <Routes>
           <Route
             path="/match/:leagueId/:matchId"
@@ -339,6 +373,7 @@ function App() {
             }
           />
         </Routes>
+        </PageBoundary>
       )}
 
       {/* نافذة البحث السريع الشامل */}

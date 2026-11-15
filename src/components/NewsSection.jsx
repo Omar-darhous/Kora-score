@@ -1,3 +1,5 @@
+import NewsImage from './NewsImage';
+import RequestState from './RequestState';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Newspaper, Clock, X, ExternalLink, Globe } from 'lucide-react';
@@ -9,20 +11,27 @@ const NewsSection = () => {
   const [activeArticle, setActiveArticle] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const [error, setError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
+
   useEffect(() => {
+    let active = true;
     const fetchNews = async () => {
       setLoading(true);
+      setError(null);
       try {
-        const data = await getNews();
-        setNews(data);
+        const data = await getNews({ strict: true });
+        if (active) setNews(data);
       } catch (e) {
         console.error('Failed to load news:', e);
+        if (active) setError('تعذر الوصول إلى الأخبار. تحقق من اتصالك وأعد المحاولة.');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
     fetchNews();
-  }, []);
+    return () => { active = false; };
+  }, [retryCount]);
 
   return (
     <div className="news-container">
@@ -39,17 +48,19 @@ const NewsSection = () => {
       </div>
 
       {loading ? (
-        <div className="news-grid">
+        <div className="news-grid" role="status" aria-label="جارٍ تحميل الأخبار" aria-busy="true">
           {[...Array(6)].map((_, i) => (
             <NewsCardSkeleton key={i} />
           ))}
         </div>
+      ) : error ? (
+        <RequestState message={error} onRetry={() => setRetryCount(value => value + 1)} />
       ) : news.length === 0 ? (
         <div className="glass-card empty-state">
           <Newspaper size={36} className="empty-icon" />
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>لم نتمكن من جلب الأخبار الرياضية حالياً</h3>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>لا توجد أخبار متاحة حالياً</h3>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-            يرجى التحقق من اتصالك بالإنترنت أو إعادة المحاولة لاحقاً.
+            لم ينشر المصدر أخباراً لعرضها. يمكنك العودة لاحقاً.
           </p>
         </div>
       ) : (
@@ -67,15 +78,7 @@ const NewsSection = () => {
               aria-label={item.title}
             >
               <div className="news-img-container">
-                <img 
-                  src={item.img} 
-                  alt={item.title} 
-                  className="news-img" 
-                  loading="lazy"
-                  onError={(e) => {
-                    e.target.src = 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=600';
-                  }}
-                />
+                <NewsImage src={item.img} alt={item.title} className="news-img" loading="lazy" />
                 <span className="news-tag">{item.tag}</span>
               </div>
               
@@ -133,11 +136,7 @@ const NewsSection = () => {
 
               <div className="modal-body" style={{ padding: 0 }}>
                 <div style={{ width: '100%', height: 260, position: 'relative', overflow: 'hidden' }}>
-                  <img 
-                    src={activeArticle.img} 
-                    alt={activeArticle.title} 
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                  />
+                  <NewsImage src={activeArticle.img} alt={activeArticle.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   <span className="news-tag" style={{ bottom: 14, right: 14, top: 'auto', left: 'auto' }}>
                     {activeArticle.tag}
                   </span>

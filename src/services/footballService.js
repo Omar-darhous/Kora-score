@@ -1,16 +1,12 @@
+import { cachedJson } from './requestCache.js';
+import { parseMatchResult } from './matchResult.js';
+import { classifyRound, rounds } from './tournamentRules.js';
 // خدمة جلب بيانات كرة القدم الحية والحقيقية بالكامل من واجهات ESPN المفتوحة وموجز الأخبار DW الرياضي
 
-import { LEAGUES, NEWS } from './mockData.js';
+import { LEAGUES } from './mockData.js';
 
 // قائمة بالصور الافتراضية عالية الجودة لتبديلها في الأخبار
-const NEWS_IMAGES = [
-  'https://images.unsplash.com/photo-1579952362774-3839e15a400c?auto=format&fit=crop&q=80&w=600',
-  'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=600',
-  'https://images.unsplash.com/photo-1518063319789-7217e6706b04?auto=format&fit=crop&q=80&w=600',
-  'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&q=80&w=600',
-  'https://images.unsplash.com/photo-1540747737956-fd63f861d63e?auto=format&fit=crop&q=80&w=600',
-  'https://images.unsplash.com/photo-1551958219-acbc608c6377?auto=format&fit=crop&q=80&w=600'
-];
+
 
 export const getLeagues = () => {
   return LEAGUES;
@@ -136,16 +132,9 @@ const getMockEgyptianMatches = () => {
 
 // ترجمة الأدوار الإقصائية إلى العربية
 const mapKnockoutStage = (slug) => {
-  if (!slug) return null;
-  const s = slug.toLowerCase();
-  if (s.includes('quarter') || s.includes('1/4') || s.includes('quarterfinals')) return 'ربع النهائي';
-  if (s.includes('semi') || s.includes('1/2') || s.includes('semifinals')) return 'نصف النهائي';
-  if (s.includes('final') && !s.includes('semi') && !s.includes('quarter')) return 'النهائي';
-  if (s.includes('round-of-16') || s.includes('round of 16') || s.includes('1/8') || s.includes('octavos')) return 'دور الـ 16';
-  if (s.includes('round-of-32') || s.includes('round of 32') || s.includes('1/16')) return 'دور الـ 32';
-  if (s.includes('third-place') || s.includes('3rd-place') || s.includes('bronze')) return 'تحديد المركز الثالث';
-  if (s.includes('group-stage') || s.includes('groups')) return 'دور المجموعات';
-  return null;
+  const key = classifyRound(slug);
+  if (key) return rounds.find(([id]) => id === key)?.[1] || null;
+  return /group|league.phase/i.test(slug || '') ? 'مرحلة المجموعات / الدوري' : null;
 };
 
 // ترجمة الجولات الأسبوعية إلى العربية
@@ -166,7 +155,7 @@ const translateRoundText = (text) => {
 };
 
 // جلب المباريات الحقيقية لجميع الدوريات في تاريخ معين (تنسيق YYYYMMDD)
-export const getMatches = async (dateStr) => {
+export const getMatches = async (dateStr, { strict = false, onPartial, forceRefresh = false } = {}) => {
   if (!dateStr) {
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -176,6 +165,7 @@ export const getMatches = async (dateStr) => {
   }
 
   const activeLeagues = getLeagues();
+  let failedRequests = 0;
 
   try {
     const promises = activeLeagues.map(async (league) => {
@@ -189,9 +179,7 @@ export const getMatches = async (dateStr) => {
 
       try {
         const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.id}/scoreboard?dates=${dateStr}`;
-        const response = await fetch(url);
-        if (!response.ok) return [];
-        const data = await response.json();
+        const data = await cachedJson(url, { ttl: 15000, forceRefresh });
         
         let fallbackRound = '';
         const calendar = data.leagues?.[0]?.calendar || [];
@@ -262,6 +250,7 @@ export const getMatches = async (dateStr) => {
             awayScore: parseInt(awayCompetitor.score) || 0,
             awayTeamId: awayCompetitor.team?.id,
             status: statusStr,
+            ...parseMatchResult(event.status || comp.status, comp.competitors),
             minute: event.status?.displayClock ? event.status.displayClock.replace("'", "") : event.status?.clock || 0,
             time: matchTime,
             roundName,
@@ -269,12 +258,15 @@ export const getMatches = async (dateStr) => {
           };
         });
       } catch (err) {
+        failedRequests += 1;
         console.error(`Error fetching matches for league ${league.id}:`, err);
         return [];
       }
     });
 
     const results = await Promise.all(promises);
+    if (strict && failedRequests === activeLeagues.filter(league => league.id !== 'egypt.1').length) throw new Error("Match schedule unavailable");
+    if (failedRequests > 0) onPartial?.();
     const allMatches = results.flat();
 
     return allMatches.sort((a, b) => {
@@ -283,6 +275,7 @@ export const getMatches = async (dateStr) => {
     });
   } catch (e) {
     console.error('Failed to load matches:', e);
+    if (strict) throw e;
     return [];
   }
 };
@@ -304,9 +297,7 @@ export const getMatchDetails = async (leagueId, eventId) => {
 
   try {
     const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/summary?event=${eventId}`;
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const summary = await response.json();
+    const summary = await cachedJson(url, { ttl: 15000 });
 
     const boxscore = summary.boxscore || {};
     const homeTeamId = boxscore.teams?.[0]?.team?.id;
@@ -390,7 +381,21 @@ export const getMatchDetails = async (leagueId, eventId) => {
       }
     }
 
+    const competition = summary.header?.competitions?.[0];
+    const home = competition?.competitors?.find(c => c.homeAway === 'home');
+    const away = competition?.competitors?.find(c => c.homeAway === 'away');
+    const match = competition && home && away ? {
+      id: String(eventId), leagueId,
+      homeTeam: home.team?.displayName, awayTeam: away.team?.displayName,
+      homeLogo: home.team?.logo || home.team?.logos?.[0]?.href,
+      awayLogo: away.team?.logo || away.team?.logos?.[0]?.href,
+      homeScore: Number(home.score?.value ?? home.score ?? 0),
+      awayScore: Number(away.score?.value ?? away.score ?? 0),
+      status: competition.status?.type?.state === 'post' ? 'FT' : competition.status?.type?.state === 'in' ? 'LIVE' : 'NS',
+      ...parseMatchResult(competition.status, competition.competitors)
+    } : null;
     return {
+      match,
       stats: statsObj,
       events: events.sort((a, b) => b.time - a.time),
       lineups
@@ -416,8 +421,13 @@ export const subscribeToLiveMatches = (callback) => {
       const dd = String(today.getDate()).padStart(2, '0');
       const dateStr = `${yyyy}${mm}${dd}`;
 
-      const currentMatches = await getMatches(dateStr);
-      subscribers.forEach(sub => sub(currentMatches));
+      try {
+        let partial = false;
+        const currentMatches = await getMatches(dateStr, { strict: true, forceRefresh: true, onPartial: () => { partial = true; } });
+        if (!partial) subscribers.forEach(sub => sub(currentMatches));
+      } catch {
+        // Keep the last successful snapshot when background refresh fails.
+      }
     }, 30000); 
   }
 
@@ -465,6 +475,7 @@ const parseStandingsEntries = (entries) => {
 
     return {
       teamId,
+      qualificationNote: item.note?.description || '',
       rank: getStatVal('rank') || item.rank || 0,
       team: item.team?.displayName || 'فريق كروي',
       logo: item.team?.logos?.[0]?.href || 'https://a.espncdn.com/i/teamlogos/default-soccer.png',
@@ -495,7 +506,7 @@ const parseStandingsEntries = (entries) => {
 };
 
 // جلب ترتيب الدوري الحقيقي (الدوري المصري الحالي المحدث لموسم 2025/2026 بدون شعارات أندية)
-export const getStandings = async (leagueId = 'eng.1') => {
+export const getStandings = async (leagueId = 'eng.1', { strict = false } = {}) => {
   if (leagueId === 'egypt.1') {
     const mockGroup = {
       name: 'الدوري المصري الممتاز (الموسم الحالي 2025-2026)',
@@ -528,9 +539,7 @@ export const getStandings = async (leagueId = 'eng.1') => {
 
   try {
     const url = `https://site.api.espn.com/apis/v2/sports/soccer/${leagueId}/standings`;
-    const response = await fetch(url);
-    if (!response.ok) return [];
-    const data = await response.json();
+    const data = await cachedJson(url, { ttl: 60000 });
 
     const season = parseSeasonMetadata(data.season);
     const children = data.children || [];
@@ -558,17 +567,17 @@ export const getStandings = async (leagueId = 'eng.1') => {
     return result;
   } catch (e) {
     console.error(`Failed to fetch standings for league ${leagueId}:`, e);
+    if (strict) throw e;
     return [];
   }
 };
 
 // جلب الأخبار الرياضية الحقيقية
-export const getNews = async () => {
+export const getNews = async ({ strict = false } = {}) => {
   try {
-    const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://rss.dw.com/xml/rss-ar-sports');
-    if (!res.ok) throw new Error("Failed to fetch RSS news");
-    const json = await res.json();
+    const json = await cachedJson('https://api.rss2json.com/v1/api.json?rss_url=https://rss.dw.com/xml/rss-ar-sports', { ttl: 300000 });
     
+    if (json.status === 'error') throw new Error("News feed unavailable");
     const items = json.items || [];
     return items.map((item, idx) => {
       const pubDate = new Date(item.pubDate);
@@ -587,8 +596,9 @@ export const getNews = async () => {
         relativeTime = `منذ ${diffDays} يوم`;
       }
 
-      const imageIndex = idx % NEWS_IMAGES.length;
-      const imageUrl = item.thumbnail || item.enclosure?.link || NEWS_IMAGES[imageIndex];
+      const embeddedImage = (item.content || item.description || '').match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
+      const candidates = [item.thumbnail, item.enclosure?.type?.startsWith('image/') ? item.enclosure.link : null, embeddedImage];
+      const imageUrl = candidates.find(value => typeof value === 'string' && /^https?:\/\//i.test(value)) || '';
 
       return {
         id: item.guid || String(idx),
@@ -604,121 +614,63 @@ export const getNews = async () => {
     });
   } catch (e) {
     console.error("Failed to load real news:", e);
+    if (strict) throw e;
     return [];
   }
 };
 
 // جلب تفاصيل مباريات الأدوار الإقصائية لكأس العالم وترتيبها في هيكل الشجرة
-export const getWorldCupKnockouts = async () => {
-  try {
-    const url = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260720&limit=200';
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const data = await response.json();
-    const events = data.events || [];
-    
-    // فلترة وتنسيق المباريات
-    const parsedMatches = events.map(event => {
-      const comp = event.competitions?.[0] || {};
-      const homeCompetitor = comp.competitors?.find(c => c.homeAway === 'home') || {};
-      const awayCompetitor = comp.competitors?.find(c => c.homeAway === 'away') || {};
-      
-      let statusStr = 'NS'; 
-      if (event.status?.type?.state === 'in') {
-        statusStr = 'LIVE'; 
-      } else if (event.status?.type?.state === 'post') {
-        statusStr = 'FT'; 
-      }
-
-      const matchTime = new Date(event.date).toLocaleTimeString('ar-EG', {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-
-      const seasonSlug = event.season?.slug || '';
-      const altNote = comp.altGameNote || '';
-
-      const knockoutStage = mapKnockoutStage(seasonSlug) || mapKnockoutStage(altNote);
-
-      return {
-        id: event.id,
-        leagueId: 'fifa.world', // to work with details popup
-        homeTeam: homeCompetitor.team?.displayName || 'فريق مستضيف',
-        homeLogo: homeCompetitor.team?.logo || 'https://a.espncdn.com/i/teamlogos/default-soccer.png',
-        homeScore: parseInt(homeCompetitor.score) ?? 0,
-        awayTeam: awayCompetitor.team?.displayName || 'فريق ضيف',
-        awayLogo: awayCompetitor.team?.logo || 'https://a.espncdn.com/i/teamlogos/default-soccer.png',
-        awayScore: parseInt(awayCompetitor.score) ?? 0,
-        status: statusStr,
-        statusDetail: event.status?.type?.detail || '',
-        minute: event.status?.displayClock ? event.status.displayClock.replace("'", "") : event.status?.clock || 0,
-        time: matchTime,
-        date: event.date,
-        roundSlug: seasonSlug || altNote,
-        knockoutStage
-      };
+export const getTournamentKnockouts = async (leagueId, seasonYear) => {
+  const year = Number(seasonYear);
+  if (!Number.isInteger(year) || year < 1900) throw new Error('Season unavailable');
+  // European seasons span two calendar years; never mix different seasons.
+  const years = leagueId.startsWith('uefa.') ? [year, year + 1] : [year];
+  const pages = await Promise.all(years.map(async calendarYear => {
+    return cachedJson(`https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/scoreboard?dates=${calendarYear}&limit=1000`, { ttl: 15000, timeout: 20000 });
+  }));
+  const data = { events: pages.flatMap(page => page.events || []) };
+  const result = Object.fromEntries(rounds.map(([key]) => [key, []]));
+  const seen = new Set();
+  for (const event of data.events || []) {
+    if (Number(event.season?.year) !== year || seen.has(event.id)) continue;
+    seen.add(event.id);
+    const comp = event.competitions?.[0];
+    if (!comp) continue;
+    const stage = classifyRound(event.season?.slug) || classifyRound(comp.altGameNote) || classifyRound((comp.notes || []).map(n => n.text).join(' '));
+    if (!stage) continue;
+    const home = comp.competitors?.find(c => c.homeAway === 'home') || {};
+    const away = comp.competitors?.find(c => c.homeAway === 'away') || {};
+    const status = event.status || comp.status;
+    const score = value => value !== '' && value != null && Number.isFinite(Number(value)) ? Number(value) : null;
+    result[stage].push({
+      id: event.id, leagueId, date: event.date, knockoutStage: stage,
+      homeTeamId: home.team?.id, awayTeamId: away.team?.id,
+      homeTeam: home.team?.displayName || 'لم يتحدد بعد', awayTeam: away.team?.displayName || 'لم يتحدد بعد',
+      homeLogo: home.team?.logo, awayLogo: away.team?.logo,
+      homeScore: score(home.score), awayScore: score(away.score),
+      homeWinner: home.winner === true, awayWinner: away.winner === true,
+      status: status?.type?.state === 'post' ? 'FT' : status?.type?.state === 'in' ? 'LIVE' : 'NS',
+      ...parseMatchResult(status, comp.competitors),
+      time: new Date(event.date).toLocaleString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     });
-
-    const r16 = new Array(8).fill(null);
-    const qf = new Array(4).fill(null);
-    const sf = new Array(2).fill(null);
-    let final = null;
-    let thirdPlace = null;
-
-    const r16Definitions = [
-      { teams: ['Canada', 'Morocco'], idx: 0 },
-      { teams: ['Paraguay', 'France'], idx: 1 },
-      { teams: ['Portugal', 'Spain'], idx: 2 },
-      { teams: ['United States', 'Belgium'], idx: 3 },
-      { teams: ['Brazil', 'Norway'], idx: 4 },
-      { teams: ['Mexico', 'England'], idx: 5 },
-      { teams: ['Argentina', 'Egypt'], idx: 6 },
-      { teams: ['Switzerland', 'Colombia'], idx: 7 }
-    ];
-
-    const qfDefinitions = [
-      { teams: ['France', 'Morocco'], idx: 0 },
-      { teams: ['Spain', 'Belgium'], idx: 1 },
-      { teams: ['Norway', 'England'], idx: 2 },
-      { teams: ['Argentina', 'Switzerland'], idx: 3 }
-    ];
-
-    const sfDefinitions = [
-      { teams: ['France', 'Spain'], idx: 0 },
-      { teams: ['England', 'Argentina'], idx: 1 }
-    ];
-
-    parsedMatches.forEach(match => {
-      const slug = (match.roundSlug || '').toLowerCase();
-      const home = match.homeTeam;
-      const away = match.awayTeam;
-      
-      const isMatch = (def) => (
-        (home.includes(def.teams[0]) && away.includes(def.teams[1])) || 
-        (home.includes(def.teams[1]) && away.includes(def.teams[0]))
-      );
-
-      if (slug.includes('round-of-16') || slug.includes('1/8') || slug.includes('octavos')) {
-        const def = r16Definitions.find(isMatch);
-        if (def) r16[def.idx] = match;
-      } else if (slug.includes('quarter')) {
-        const def = qfDefinitions.find(isMatch);
-        if (def) qf[def.idx] = match;
-      } else if (slug.includes('semi')) {
-        const def = sfDefinitions.find(isMatch);
-        if (def) sf[def.idx] = match;
-      } else if (slug.includes('final') && !slug.includes('semi') && !slug.includes('quarter') && !slug.includes('3rd') && !slug.includes('third')) {
-        final = match;
-      } else if (slug.includes('3rd') || slug.includes('third')) {
-        thirdPlace = match;
-      }
-    });
-
-    return { r16, qf, sf, final, thirdPlace };
-  } catch (e) {
-    console.error("Failed to fetch world cup knockouts:", e);
-    return null;
   }
+  // Fetch period scores only for matches that actually needed extra time or penalties.
+  const specialMatches = Object.values(result).flat().filter(m => m.finishType === 'extra-time' || m.finishType === 'penalties');
+  for (let i = 0; i < specialMatches.length; i += 4) {
+    await Promise.all(specialMatches.slice(i, i + 4).map(async match => {
+      try {
+        const summary = await cachedJson(`https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/summary?event=${match.id}`, { ttl: 15000, timeout: 10000 });
+        const competition = summary.header?.competitions?.[0];
+        if (competition?.status && competition?.competitors?.length === 2) {
+          const periods = parseMatchResult(competition.status, competition.competitors);
+          match.regulationScore = periods.regulationScore;
+          match.extraTimeScore = periods.extraTimeScore;
+        }
+      } catch { /* The match remains visible when period details are unavailable. */ }
+    }));
+  }
+  for (const matches of Object.values(result)) matches.sort((a,b) => new Date(a.date) - new Date(b.date));
+  return result;
 };
 
 // ==========================================
@@ -900,9 +852,7 @@ export const getTeamDetails = async (teamId) => {
 
   try {
     const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/teams/${cleanId}`;
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const data = await response.json();
+    const data = await cachedJson(url, { ttl: 300000 });
     const t = data.team;
     if (!t) return null;
 
@@ -945,9 +895,7 @@ export const getTeamSchedule = async (leagueId, teamId) => {
 
   try {
     const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/teams/${cleanId}/schedule`;
-    const response = await fetch(url);
-    if (!response.ok) return [];
-    const data = await response.json();
+    const data = await cachedJson(url, { ttl: 15000 });
     const events = data.events || [];
 
     return events.map(event => {
@@ -976,10 +924,11 @@ export const getTeamSchedule = async (leagueId, teamId) => {
         result = 'L';
       }
 
+      const eventStatus = event.status || comp.status;
       let status = 'FT';
-      if (event.status?.type?.state === 'in') {
+      if (eventStatus?.type?.state === 'in') {
         status = 'LIVE';
-      } else if (event.status?.type?.state === 'pre') {
+      } else if (eventStatus?.type?.state === 'pre') {
         status = 'NS';
       }
 
@@ -997,6 +946,7 @@ export const getTeamSchedule = async (leagueId, teamId) => {
         opponentLogo: opponentComp.team?.logos?.[0]?.href || opponentComp.team?.logo || '',
         result,
         status,
+        ...parseMatchResult(event.status || comp.status, competitors),
         rawEvent: event
       };
     });
@@ -1022,9 +972,7 @@ export const getTeamRoster = async (leagueId, teamId) => {
 
   try {
     const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/teams/${cleanId}/roster`;
-    const response = await fetch(url);
-    if (!response.ok) return [];
-    const data = await response.json();
+    const data = await cachedJson(url, { ttl: 300000 });
     const athletes = data.athletes || [];
 
     return athletes.map(a => {

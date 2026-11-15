@@ -1,3 +1,4 @@
+import { finishedMatchLabel } from '../services/matchResult';
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Award, BarChart2, Users, Clock, Activity, Shield } from 'lucide-react';
@@ -7,6 +8,9 @@ const MatchDetailModal = ({ match, details, loading, onClose, isStandalone = fal
   const [activeTab, setActiveTab] = useState('stats');
 
   if (!match) return null;
+  if (details?.match && String(details.match.id) === String(match.id)) {
+    match = { ...match, ...details.match };
+  }
 
   const stats = details?.stats || {
     possession: [50, 50],
@@ -85,13 +89,18 @@ const MatchDetailModal = ({ match, details, loading, onClose, isStandalone = fal
                 {match.status === 'LIVE' && <span className="live-dot" />}
                 {match.status === 'LIVE' ? (
                   <>مباشر (<bdi>{String(match.minute ?? '').replace(/['"’`]/g, '').trim()}</bdi> د)</>
-                ) : match.status === 'FT' ? 'انتهت المباراة' : 'لم تبدأ بعد'}
+                ) : match.status === 'FT' ? finishedMatchLabel(match) : 'لم تبدأ بعد'}
               </span>
 
               <span className="details-score">
                 {match.status === 'NS' ? 'VS' : `${match.homeScore} - ${match.awayScore}`}
               </span>
 
+              {['extra-time', 'penalties'].includes(match.finishType) && <div className="match-period-summary">
+                <span>نهاية 90 دقيقة: <bdi>{match.regulationScore ? match.regulationScore.join(' - ') : 'غير متاحة'}</bdi></span>
+                {(match.extraTimeScore || match.finishType === 'extra-time') && <span>بعد الوقت الإضافي: <bdi>{(match.extraTimeScore || [match.homeScore, match.awayScore]).join(' - ')}</bdi></span>}
+                {match.finishType === 'penalties' && <span>ركلات الترجيح: <bdi>{Number.isFinite(match.homePenalties) && Number.isFinite(match.awayPenalties) ? match.homePenalties + ' - ' + match.awayPenalties : 'غير متاحة'}</bdi></span>}
+              </div>}
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700 }}>
                 {match.roundName || match.time}
               </span>

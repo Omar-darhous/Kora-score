@@ -1,3 +1,5 @@
+import { finishedMatchLabel } from '../services/matchResult';
+import RequestState from '../components/RequestState';
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -17,7 +19,7 @@ import { POPULAR_TEAMS } from '../services/searchService';
 import FavoriteButton from '../components/FavoriteButton';
 import { EgyptianDisclaimer, EgyptianBadge } from '../components/EgyptianDisclaimer';
 
-const FavoritesPage = ({ matches = [], leagues = [], onMatchClick }) => {
+const FavoritesPage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, matchesError, onRetryMatches }) => {
   const {
     favorites,
     favoriteLeagues,
@@ -395,7 +397,7 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick }) => {
                 </span>
               </div>
 
-              {favoriteMatches.length === 0 ? (
+              {matchesLoading || matchesError ? (<RequestState loading={matchesLoading} message={matchesError} onRetry={onRetryMatches} />) : favoriteMatches.length === 0 ? (
                 <div className="glass-card fav-subsection-empty">
                   <p>
                     لا توجد مباريات لفرقك أو بطولاتك المفضلة ضمن جدول التاريخ المحمّل حالياً.
@@ -409,11 +411,11 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick }) => {
                     let statusLabel = 'لم تبدأ';
                     if (isEgyMatch) {
                       if (match.status === 'LIVE') statusLabel = 'جارية (تجريبية)';
-                      else if (match.status === 'FINISHED') statusLabel = 'انتهت (تجريبية)';
+                      else if (['FT', 'FINISHED'].includes(match.status)) statusLabel = finishedMatchLabel(match) + ' (تجريبية)';
                       else statusLabel = match.time || 'مجدولة (تجريبية)';
                     } else {
                       if (match.status === 'LIVE') statusLabel = `مباشر • ${match.minute || ''}`;
-                      else if (match.status === 'FINISHED') statusLabel = 'انتهت';
+                      else if (['FT', 'FINISHED'].includes(match.status)) statusLabel = finishedMatchLabel(match);
                       else statusLabel = match.time || 'قادمة';
                     }
 

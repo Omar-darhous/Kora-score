@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Radio, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 
-const LiveMatches = ({ matches, onMatchClick }) => {
+const LiveMatches = ({ matches, onMatchClick, loading, error }) => {
   const scrollContainerRef = useRef(null);
   const liveMatches = matches.filter(m => m.status === 'LIVE');
 
@@ -12,6 +12,8 @@ const LiveMatches = ({ matches, onMatchClick }) => {
       scrollContainerRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     }
   };
+
+  if (loading || error) return null;
 
   if (liveMatches.length === 0) {
     return (

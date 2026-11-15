@@ -1,0 +1,47 @@
+// UEFA 2024/25 onward: top 8 -> R16, 9-24 -> play-offs.
+// FIFA 2026: top 2 in 12 groups plus 8 third-place teams -> R32.
+export const isTournament = id => ['fifa.world', 'uefa.champions', 'uefa.europa'].includes(id);
+export const rounds = [['playoff','ملحق الأدوار الإقصائية'],['r32','دور الـ 32'],['r16','دور الـ 16'],['qf','ربع النهائي'],['sf','نصف النهائي'],['thirdPlace','المركز الثالث'],['final','النهائي']];
+export function classifyRound(text = '') {
+  const s = text.toLowerCase().replaceAll('-', ' ');
+  if (/qualif|preliminary/.test(s)) return null;
+  if (/third|3rd|bronze/.test(s)) return 'thirdPlace';
+  if (/round of 32|1\/16/.test(s)) return 'r32';
+  if (/round of 16|1\/8|octavos/.test(s)) return 'r16';
+  if (/quarter|1\/4/.test(s)) return 'qf';
+  if (/semi|1\/2/.test(s)) return 'sf';
+  if (/knockout.*play|play.*off/.test(s)) return 'playoff';
+  if (/^final$|, final$| final$/.test(s.trim())) return 'final';
+  return null;
+}
+const zone = (label, color = '#10b981') => ({ label, color, bg: color + '18', borderRight: '4px solid ' + color });
+export function qualification(id, team, groups, bracket) {
+  if (!Number.isInteger(team.rank) || team.rank < 1) return null;
+  const year = Number(groups[0]?.season?.year);
+  const entries = groups.flatMap(g => g.entries || []);
+  if (id.startsWith('uefa.') && year >= 2024 && groups.length === 1 && entries.length === 36) {
+    const complete = entries.every(t => t.played >= 8);
+    const prefix = complete ? 'تأهل إلى ' : 'مركز مؤهل إلى ';
+    if (team.rank <= 8) return zone(prefix + 'دور الـ16');
+    if (team.rank <= 24) return zone(prefix + 'الملحق الإقصائي', '#f59e0b');
+    return zone(complete ? 'خرج من البطولة' : 'خارج مراكز التأهل حالياً', '#ef4444');
+  }
+  if (id === 'fifa.world' && year === 2026 && groups.length === 12) {
+    const group = groups.find(g => g.entries.some(t => t.teamId === team.teamId));
+    const complete = group?.entries.length === 4 && group.entries.every(t => t.played === 3);
+    if (team.rank <= 2) return zone(complete ? 'تأهل إلى دور الـ32' : 'مركز مؤهل إلى دور الـ32');
+    if (team.rank === 3) {
+      const participants = new Set((bracket?.r32 || []).flatMap(m => [m.homeTeamId, m.awayTeamId]).filter(Boolean));
+      if (participants.has(team.teamId)) return zone('تأهل ضمن أفضل 8 ثوالث', '#3b82f6');
+      if (participants.size === 32) return zone('لم يتأهل ضمن أفضل الثوالث', '#ef4444');
+      return zone('ينافس على أفضل 8 ثوالث — التأهل غير مؤكد', '#f59e0b');
+    }
+    return zone(complete ? 'خرج من دور المجموعات' : 'خارج مراكز التأهل حالياً', '#ef4444');
+  }
+  // Historical group formats: do not apply a modern league-phase rule.
+  if (id === 'fifa.world' && year >= 1998 && year <= 2022 && groups.length === 8 && team.rank <= 2)
+    return zone('مركز مؤهل إلى دور الـ16');
+  if (id.startsWith('uefa.') && year < 2024 && groups.every(g => g.entries.length === 4) && team.rank <= 2)
+    return zone('مركز مؤهل إلى الدور التالي');
+  return null;
+}

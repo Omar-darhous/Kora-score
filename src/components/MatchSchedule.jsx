@@ -1,3 +1,5 @@
+import { finishedMatchLabel } from '../services/matchResult';
+import RequestState from './RequestState';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar as CalendarIcon, Filter, ChevronLeft, ChevronRight, Clock, X } from 'lucide-react';
@@ -32,7 +34,10 @@ const formatDateToDisplay = (dateStr) => {
 };
 
 const MatchSchedule = ({ 
-  matches, 
+  matches,
+  loading = false,
+  error,
+  onRetry,
   selectedDateStr, 
   setSelectedDateStr, 
   selectedLeague, 
@@ -337,13 +342,16 @@ const MatchSchedule = ({
       {/* Matches List */}
       <div className="matches-list">
         {selectedLeague === 'egypt.1' && <EgyptianDisclaimer />}
-        {groupKeys.length === 0 ? (
+        {loading || error ? (
+          <RequestState loading={loading} message={error} onRetry={onRetry} />
+        ) : groupKeys.length === 0 ? (
           <div className="glass-card empty-state">
             <Clock size={36} className="empty-icon" />
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>لا توجد مباريات لهذا اليوم</h3>
             <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: 400 }}>
               لم يتم العثور على أي مباريات جارية أو مجدولة في هذا التاريخ بالتصفية المحددة. يمكنك اختيار تاريخ آخر عبر التقويم أعلاه.
             </p>
+            {selectedLeague !== 'all' && <button type="button" className="tab-btn active" onClick={() => setSelectedLeague('all')}>عرض كل البطولات</button>}
           </div>
         ) : (
           groupKeys.map((leagueName) => {
@@ -419,7 +427,7 @@ const MatchSchedule = ({
                         )}
                         {match.status === 'FT' && (
                           <span className="match-status-tag ft">
-                            انتهت
+                            {finishedMatchLabel(match)}
                           </span>
                         )}
                         {match.status === 'NS' && (

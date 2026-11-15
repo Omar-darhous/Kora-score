@@ -1,3 +1,4 @@
+import { finishedMatchLabel } from '../services/matchResult';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -668,7 +669,7 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                       </span>
                     )}
                     {todayTeamMatch.status === 'FT' && (
-                      <span className="match-status-tag ft">انتهت</span>
+                      <span className="match-status-tag ft">{finishedMatchLabel(todayTeamMatch)}</span>
                     )}
                   </div>
 
@@ -951,6 +952,7 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                           <span className="score-num">{item.awayScore}</span>
                         </div>
 
+                        {item.status === 'FT' && <span className="match-finish-note">{finishedMatchLabel(item)}</span>}
                         {item.result === 'W' && (
                           <span className="team-result-badge win">فوز W</span>
                         )}

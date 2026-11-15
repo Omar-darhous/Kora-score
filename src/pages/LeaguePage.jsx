@@ -1,3 +1,5 @@
+import { finishedMatchLabel } from '../services/matchResult';
+import RequestState from '../components/RequestState';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -18,7 +20,7 @@ import FavoriteButton from '../components/FavoriteButton';
 import { getStandings } from '../services/footballService';
 import { EgyptianDisclaimer, EgyptianBadge } from '../components/EgyptianDisclaimer';
 
-const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
+const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, matchesError, onRetryMatches }) => {
   const { leagueId } = useParams();
   const navigate = useNavigate();
 
@@ -34,6 +36,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
   const [standings, setStandings] = useState([]);
   const [loadingStandings, setLoadingStandings] = useState(true);
   const [errorStandings, setErrorStandings] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // الرجوع الآمن للصفحة السابقة أو العودة للترتيب العام
   const handleSafeBack = () => {
@@ -54,7 +57,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
       setLoadingStandings(true);
       setErrorStandings(null);
       try {
-        const data = await getStandings(leagueId);
+        const data = await getStandings(leagueId, { strict: true });
         if (isMounted) {
           setStandings(data);
         }
@@ -74,7 +77,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
     return () => {
       isMounted = false;
     };
-  }, [leagueId, league]);
+  }, [leagueId, league, retryCount]);
 
   // استخراج البيانات الوصفية للموسم من كائن المجموعة الأولى group.season حصراً
   const seasonMetadata = useMemo(() => {
@@ -303,10 +306,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
                 <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>{errorStandings}</p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setLoadingStandings(true);
-                    getStandings(leagueId).then(setStandings).catch(() => setErrorStandings('فشلت إعادة المحاولة.')).finally(() => setLoadingStandings(false));
-                  }}
+                  onClick={() => setRetryCount(value => value + 1)}
                   className="tab-btn active"
                 >
                   <RefreshCw size={14} />
@@ -346,7 +346,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
               </Link>
             </div>
 
-            {todayLeagueMatches.length === 0 ? (
+            {matchesLoading || matchesError ? (<RequestState loading={matchesLoading} message={matchesError} onRetry={onRetryMatches} />) : todayLeagueMatches.length === 0 ? (
               <div className="glass-card empty-state" style={{ padding: '50px 20px', textAlign: 'center' }}>
                 <Clock size={36} className="empty-icon" style={{ marginBottom: 12 }} />
                 <h4 style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: 6 }}>لا توجد مباريات لهذه البطولة اليوم</h4>
@@ -406,7 +406,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick }) => {
                         </span>
                       )}
                       {match.status === 'FT' && (
-                        <span className="match-status-tag ft">انتهت</span>
+                        <span className="match-status-tag ft">{finishedMatchLabel(match)}</span>
                       )}
                     </div>
 
