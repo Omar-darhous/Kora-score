@@ -2,6 +2,107 @@ import { cachedJson } from './requestCache.js';
 import { resolveTeamLogo } from './logoUtils.js';
 import { getMockEgyptianStandings } from './egyptianMockService.js';
 
+const normalizeSeasonParam = (season) => {
+  if (season === undefined || season === null || season === '') return null;
+  const year = Number(season);
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) return Number.NaN;
+  return year;
+};
+
+export const parseSeasonQueryParam = (rawSeason) => {
+  if (rawSeason === undefined || rawSeason === null || rawSeason === '') {
+    return { valid: true, season: null, raw: '' };
+  }
+  const trimmed = String(rawSeason).trim();
+  if (!/^\d{4}$/.test(trimmed)) {
+    return { valid: false, season: null, raw: trimmed };
+  }
+  const year = Number(trimmed);
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) {
+    return { valid: false, season: null, raw: trimmed };
+  }
+  return { valid: true, season: year, raw: trimmed };
+};
+
+export const buildSeasonSearchParams = (prevParams, { leagueId, season, leagueChanged = false } = {}) => {
+  const next = new URLSearchParams(prevParams);
+  if (leagueId !== undefined) {
+    next.set('league', leagueId);
+  }
+  if (leagueChanged || season === null || season === undefined || season === '') {
+    next.delete('season');
+  } else {
+    next.set('season', String(season));
+  }
+  return next;
+};
+
+export const isHistoricalSeasonSelected = (selectedSeason, availableSeasons = [], currentSeasonYear = null) => {
+  const normalizedSelected = normalizeSeasonParam(selectedSeason);
+  if (normalizedSelected === null || Number.isNaN(normalizedSelected)) return false;
+
+  const normalizedCurrent = normalizeSeasonParam(currentSeasonYear);
+  if (normalizedCurrent !== null && !Number.isNaN(normalizedCurrent)) {
+    return normalizedSelected !== normalizedCurrent;
+  }
+
+  if (Array.isArray(availableSeasons) && availableSeasons.length > 0) {
+    const flaggedCurrent = availableSeasons.find(s => s?.isCurrent === true);
+    if (flaggedCurrent) return normalizedSelected !== flaggedCurrent.year;
+    const latestYear = Math.max(...availableSeasons.map(s => Number(s?.year)).filter(Number.isFinite));
+    if (Number.isFinite(latestYear)) return normalizedSelected !== latestYear;
+  }
+
+  return true;
+};
+
+const formatSeasonLabel = (year, displayName = '') => {
+  if (typeof displayName === 'string') {
+    const shortSpan = displayName.match(/\b(\d{4})-(\d{2})\b/);
+    if (shortSpan) {
+      const startYear = Number(shortSpan[1]);
+      if (Number.isInteger(startYear)) return `${startYear}/${startYear + 1}`;
+    }
+    const fullSpan = displayName.match(/\b(\d{4})[/-](\d{4})\b/);
+    if (fullSpan) return `${fullSpan[1]}/${fullSpan[2]}`;
+  }
+  return String(year);
+};
+
+export const parseAvailableSeasons = (rawSeasons, { currentSeasonYear = null } = {}) => {
+  if (!Array.isArray(rawSeasons) || rawSeasons.length === 0) return [];
+  const seenYears = new Set();
+  const normalizedCurrent = normalizeSeasonParam(currentSeasonYear);
+  const parsed = [];
+
+  for (const item of rawSeasons) {
+    if (!item || typeof item !== 'object') continue;
+    const year = normalizeSeasonParam(item.year);
+    if (year === null || Number.isNaN(year) || seenYears.has(year)) continue;
+    seenYears.add(year);
+
+    const displayName = typeof item.displayName === 'string' && item.displayName.trim()
+      ? item.displayName.trim()
+      : String(year);
+
+    const entry = {
+      year,
+      label: formatSeasonLabel(year, displayName),
+      displayName,
+      isCurrent: normalizedCurrent !== null && !Number.isNaN(normalizedCurrent)
+        ? year === normalizedCurrent
+        : Boolean(item.isCurrent)
+    };
+
+    if (typeof item.startDate === 'string') entry.startDate = item.startDate;
+    if (typeof item.endDate === 'string') entry.endDate = item.endDate;
+
+    parsed.push(entry);
+  }
+
+  return parsed.sort((a, b) => b.year - a.year);
+};
+
 // استخراج وحفظ البيانات الوصفية للموسم الرياضي إن وجدت دون افتراضات
 export const parseSeasonMetadata = (rawSeason) => {
   if (!rawSeason || typeof rawSeason !== 'object') {
@@ -68,16 +169,37 @@ export const parseStandingsEntries = (entries) => {
 };
 
 // جلب ترتيب الدوري الحقيقي (الدوري المصري الحالي المحدث لموسم 2025/2026 بدون شعارات أندية)
-export const getStandings = async (leagueId = 'eng.1', { strict = false, forceRefresh = false } = {}) => {
+export const getStandings = async (leagueId = 'eng.1', { strict = false, forceRefresh = false, season: requestedSeasonRaw } = {}) => {
+  const requestedSeason = normalizeSeasonParam(requestedSeasonRaw);
+  if (Number.isNaN(requestedSeason)) {
+    const err = new Error(`Invalid season parameter: ${requestedSeasonRaw}`);
+    if (strict) throw err;
+    return [];
+  }
+
   if (leagueId === 'egypt.1') {
+    if (requestedSeason !== null) {
+      const err = new Error(`Historical season ${requestedSeason} is not available for mock league egypt.1`);
+      if (strict) throw err;
+      return [];
+    }
     return getMockEgyptianStandings();
   }
 
   try {
-    const url = `https://site.api.espn.com/apis/v2/sports/soccer/${leagueId}/standings`;
-    const data = await cachedJson(url, { ttl: 60000, forceRefresh });
+    const baseUrl = `https://site.api.espn.com/apis/v2/sports/soccer/${leagueId}/standings`;
+    const url = requestedSeason !== null ? `${baseUrl}?season=${requestedSeason}` : baseUrl;
+    const ttl = requestedSeason !== null ? 300000 : 60000;
+    const data = await cachedJson(url, { ttl, forceRefresh });
 
     const season = parseSeasonMetadata(data.season);
+    if (requestedSeason !== null) {
+      const returnedYear = normalizeSeasonParam(season?.year);
+      if (returnedYear === null || Number.isNaN(returnedYear) || returnedYear !== requestedSeason) {
+        throw new Error(`Season ${requestedSeason} unavailable for league ${leagueId}`);
+      }
+    }
+
     const children = data.children || [];
 
     let result = [];
@@ -102,6 +224,13 @@ export const getStandings = async (leagueId = 'eng.1', { strict = false, forceRe
       result.season = season;
     }
 
+    const availableSeasons = parseAvailableSeasons(data.seasons, {
+      currentSeasonYear: requestedSeason === null ? season?.year ?? null : null
+    });
+    if (availableSeasons.length > 0) {
+      result.availableSeasons = availableSeasons;
+    }
+
     return result;
   } catch (e) {
     console.error(`Failed to fetch standings for league ${leagueId}:`, e);
@@ -115,7 +244,9 @@ export const createStandingsController = ({
   onStateChange
 } = {}) => {
   let activeLeagueId = null;
+  let activeSeason = null;
   let standings = [];
+  let availableSeasons = [];
   let loading = false;
   let error = null;
   let isStale = false;
@@ -126,21 +257,35 @@ export const createStandingsController = ({
     if (!mounted) return;
     onStateChange?.({
       leagueId: activeLeagueId,
+      season: activeSeason,
       standings,
+      availableSeasons,
       loading,
       error,
       isStale
     });
   };
 
-  const load = async (leagueId, { isRetry = false } = {}) => {
+  const load = async (leagueId, { isRetry = false, season } = {}) => {
     if (!mounted || !leagueId) return;
     if (isRetry && loading) return;
 
-    if (activeLeagueId !== leagueId) {
+    const leagueChanged = activeLeagueId !== leagueId;
+    const rawTargetSeason = season !== undefined
+      ? season
+      : (leagueChanged ? null : activeSeason);
+    const targetSeason = normalizeSeasonParam(rawTargetSeason);
+    if (Number.isNaN(targetSeason)) return;
+
+    const seasonChanged = activeSeason !== targetSeason;
+    if (leagueChanged || seasonChanged) {
       activeLeagueId = leagueId;
+      activeSeason = targetSeason;
       standings = [];
       isStale = false;
+      if (leagueChanged) {
+        availableSeasons = [];
+      }
     }
 
     const currentRequestId = ++requestId;
@@ -149,12 +294,19 @@ export const createStandingsController = ({
     emit();
 
     try {
-      const data = await fetcher(leagueId, {
+      const fetchOptions = {
         strict: true,
         forceRefresh: isRetry
-      });
+      };
+      if (targetSeason !== null) {
+        fetchOptions.season = targetSeason;
+      }
+      const data = await fetcher(leagueId, fetchOptions);
       if (!mounted || currentRequestId !== requestId) return;
       standings = Array.isArray(data) ? data : [];
+      if (Array.isArray(data?.availableSeasons) && data.availableSeasons.length > 0) {
+        availableSeasons = data.availableSeasons;
+      }
       error = null;
       isStale = false;
     } catch (err) {
@@ -172,7 +324,7 @@ export const createStandingsController = ({
 
   const retry = () => {
     if (!mounted || loading || !activeLeagueId) return Promise.resolve();
-    return load(activeLeagueId, { isRetry: true });
+    return load(activeLeagueId, { isRetry: true, season: activeSeason });
   };
 
   const dispose = () => {
@@ -185,7 +337,9 @@ export const createStandingsController = ({
     dispose,
     getState: () => ({
       leagueId: activeLeagueId,
+      season: activeSeason,
       standings,
+      availableSeasons,
       loading,
       error,
       isStale

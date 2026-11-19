@@ -1654,22 +1654,54 @@ select option {
   background: var(--primary-light);
 }
 
-@media (max-width: 768px) {
-  /* Sticky First 2 Columns for Mobile Experience */
-  .standings-table th:nth-child(1),
-  .standings-table td:nth-child(1) {
-    position: sticky;
-    right: 0;
-    background: inherit;
-    z-index: 2;
+.standings-table-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.standings-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.standings-mobile-scroll-hint {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .standings-mobile-scroll-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-surface-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+    text-align: center;
   }
-  .standings-table th:nth-child(2),
-  .standings-table td:nth-child(2) {
-    position: sticky;
-    right: 44px;
-    background: inherit;
-    z-index: 2;
-    box-shadow: -4px 0 8px rgba(0, 0, 0, 0.15);
+
+  .standings-table-scroll {
+    overscroll-behavior-x: contain;
+  }
+
+  .standings-table-scroll .standings-table {
+    min-width: 580px;
+    font-size: 0.84rem;
+  }
+
+  .standings-table-scroll .standings-table th,
+  .standings-table-scroll .standings-table td {
+    padding: 10px;
   }
 }
 

@@ -1,13 +1,15 @@
 import KnockoutBracket from './KnockoutBracket';
 import { isTournament, qualification } from '../services/tournamentRules';
 import RequestState from './RequestState';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, RefreshCw } from 'lucide-react';
-import { getStandings, getLeagues, getTournamentKnockouts } from '../services/footballService';
+import { createStandingsController, getLeagues, getTournamentKnockouts } from '../services/footballService';
+import { isHistoricalSeasonSelected } from '../services/standingsService';
 import { TableRowSkeleton } from './Skeleton';
 import Dropdown from './Dropdown';
+import SeasonSelector from './SeasonSelector';
 import FavoriteButton from './FavoriteButton';
 import { EgyptianDisclaimer, EgyptianBadge, EGYPTIAN_BADGE_TEXT } from './EgyptianDisclaimer';
 
@@ -251,27 +253,61 @@ const LeagueStandings = ({
   hideLeagueSelector = false,
   standingsData = null,
   loading: propLoading = null,
-  showTitle = true
+  showTitle = true,
+  selectedSeason: propSelectedSeason = null,
+  invalidSeasonParam = false,
+  onSeasonChange = null,
+  isHistoricalSeason: propIsHistoricalSeason = null
 }) => {
   const leagues = getLeagues();
   const [internalLeague, setInternalLeague] = useState(leagues[0].id);
+  const [internalSeason, setInternalSeason] = useState(null);
 
   const activeLeague = propActiveLeague !== undefined ? propActiveLeague : internalLeague;
+  const selectedSeason = onSeasonChange ? propSelectedSeason : (propSelectedSeason ?? internalSeason);
+
   const setActiveLeague = (newLeague) => {
     if (onLeagueChange) {
       onLeagueChange(newLeague);
     } else {
       setInternalLeague(newLeague);
+      setInternalSeason(null);
     }
   };
 
-  const [internalStandingsGroups, setInternalStandingsGroups] = useState([]);
-  const [internalLoading, setInternalLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const handleSeasonChange = (nextSeason) => {
+    if (onSeasonChange) {
+      onSeasonChange(nextSeason);
+    } else {
+      setInternalSeason(nextSeason);
+    }
+  };
 
-  const standingsGroups = standingsData !== null ? standingsData : internalStandingsGroups;
-  const loading = propLoading !== null ? propLoading : (standingsData !== null ? false : internalLoading);
+  const [controllerState, setControllerState] = useState({
+    leagueId: activeLeague,
+    season: selectedSeason,
+    standings: [],
+    availableSeasons: [],
+    loading: standingsData === null,
+    error: null,
+    isStale: false
+  });
+  const controllerRef = useRef(null);
+
+  const isEgyptianHistoricalRequest = activeLeague === 'egypt.1' && selectedSeason !== null;
+  const hasInvalidSeason = invalidSeasonParam || isEgyptianHistoricalRequest;
+
+  const isSameControllerTarget = controllerState.leagueId === activeLeague && controllerState.season === selectedSeason;
+  const standingsGroups = standingsData !== null
+    ? standingsData
+    : (hasInvalidSeason ? [] : (isSameControllerTarget ? controllerState.standings : []));
+  const availableSeasons = controllerState.leagueId === activeLeague ? controllerState.availableSeasons : [];
+  const loading = propLoading !== null
+    ? propLoading
+    : (standingsData !== null ? false : (hasInvalidSeason ? false : (isSameControllerTarget ? controllerState.loading : true)));
+  const error = standingsData !== null
+    ? null
+    : (isSameControllerTarget ? controllerState.error : null);
 
   // حالات الأدوار الإقصائية
   const [subTab, setSubTab] = useState('groups'); // groups | knockout
@@ -279,47 +315,35 @@ const LeagueStandings = ({
   const [loadingKnockout, setLoadingKnockout] = useState(false);
   const [knockoutError, setKnockoutError] = useState(null);
   const [knockoutRetry, setKnockoutRetry] = useState(0);
-  const seasonYear = standingsGroups[0]?.season?.year;
+  const seasonYear = standingsGroups[0]?.season?.year || selectedSeason;
 
-  // مزامنة التبويب الفرعي عند تغيير البطولة
+  // مزامنة التبويب الفرعي عند تغيير البطولة أو الموسم
   useEffect(() => {
     setSubTab('groups');
-  }, [activeLeague]);
+  }, [activeLeague, selectedSeason]);
 
-  // جلب ترتيب المجموعات مع تنظيف لمنع تسريب الذاكرة وتداخل الطلبات (فقط إذا لم يتم تمرير البيانات مسبقاً)
+  // جلب ترتيب المجموعات عبر متحكم الترتيب الواعي بالموسم (فقط إذا لم يتم تمرير البيانات مسبقاً)
   useEffect(() => {
-    if (standingsData !== null) return;
-    let isMounted = true;
-    const fetchLeagueStandings = async () => {
-      setInternalLoading(true);
-      setError(null);
-      try {
-        const data = await getStandings(activeLeague, { strict: true, forceRefresh: retryCount > 0 });
-        if (isMounted) {
-          setInternalStandingsGroups(data);
-        }
-      } catch (e) {
-        if (isMounted) {
-          console.error('Failed to load standings', e);
-          setError('تعذر تحميل جدول الترتيب. أعد المحاولة.');
-        }
-      } finally {
-        if (isMounted) {
-          setInternalLoading(false);
-        }
+    if (standingsData !== null || hasInvalidSeason) return;
+    const controller = createStandingsController({
+      onStateChange: setControllerState
+    });
+    controllerRef.current = controller;
+    controller.load(activeLeague, { season: selectedSeason });
+
+    return () => {
+      controller.dispose();
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
       }
     };
-    fetchLeagueStandings();
-    return () => {
-      isMounted = false;
-    };
-  }, [activeLeague, standingsData, retryCount]);
+  }, [activeLeague, selectedSeason, standingsData, hasInvalidSeason]);
 
   useEffect(() => {
     let active = true;
     setKnockoutData(null);
     setKnockoutError(null);
-    if (!isTournament(activeLeague) || !seasonYear) return;
+    if (!isTournament(activeLeague) || !seasonYear || hasInvalidSeason) return;
     setLoadingKnockout(true);
     getTournamentKnockouts(activeLeague, seasonYear).then(data => {
       if (active) setKnockoutData(data);
@@ -327,15 +351,28 @@ const LeagueStandings = ({
       if (active) setKnockoutError('تعذر تحميل مواجهات الموسم. أعد المحاولة.');
     }).finally(() => { if (active) setLoadingKnockout(false); });
     return () => { active = false; };
-  }, [activeLeague, seasonYear, knockoutRetry]);
-  const getZone = team => isTournament(activeLeague)
-    ? qualification(activeLeague, team, standingsGroups, knockoutData)
-    : getRankStyleAndText(activeLeague, team.rank);
+  }, [activeLeague, seasonYear, knockoutRetry, hasInvalidSeason]);
+
+  const effectiveIsHistorical = propIsHistoricalSeason !== null
+    ? propIsHistoricalSeason
+    : isHistoricalSeasonSelected(selectedSeason, availableSeasons);
+  const suppressDomesticZones = !isTournament(activeLeague) && effectiveIsHistorical;
+
+  const getZone = team => {
+    if (isTournament(activeLeague)) {
+      return qualification(activeLeague, team, standingsGroups, knockoutData);
+    }
+    if (suppressDomesticZones) return null;
+    return getRankStyleAndText(activeLeague, team.rank);
+  };
   const legend = isTournament(activeLeague)
     ? [...new Map(standingsGroups.flatMap(g => g.entries).map(getZone).filter(Boolean).map(z => [z.label, z])).values()]
-    : getLegendItems(activeLeague);
+    : (suppressDomesticZones ? [] : getLegendItems(activeLeague));
 
   const currentLeagueObj = leagues.find((l) => l.id === activeLeague);
+  const leaguePageLink = currentLeagueObj
+    ? `/league/${currentLeagueObj.id}${selectedSeason !== null ? `?season=${selectedSeason}` : ''}`
+    : '/standings';
 
   return (
     <div className="standings-container">
@@ -346,7 +383,17 @@ const LeagueStandings = ({
             ترتيب البطولات والدوريات الكبرى
           </h2>
           {currentLeagueObj && (
-            <div className="d-flex align-center gap-2">
+            <div className="d-flex align-center flex-wrap gap-2">
+              {standingsData === null && !hideLeagueSelector && (
+                <SeasonSelector
+                  leagueId={activeLeague}
+                  availableSeasons={availableSeasons}
+                  selectedSeason={selectedSeason}
+                  currentSeasonYear={standingsGroups[0]?.season?.year ?? null}
+                  onSeasonChange={handleSeasonChange}
+                  loading={loading}
+                />
+              )}
               <FavoriteButton
                 type="league"
                 item={{
@@ -360,7 +407,7 @@ const LeagueStandings = ({
                 showLabel
               />
               <Link
-                to={`/league/${currentLeagueObj.id}`}
+                to={leaguePageLink}
                 className="league-action-link secondary"
                 style={{ padding: '6px 12px', fontSize: '0.8rem' }}
               >
@@ -445,8 +492,27 @@ const LeagueStandings = ({
         <p>{activeLeague === 'fifa.world' && Number(seasonYear) === 2026 ? 'يتأهل أول وثاني كل مجموعة وأفضل 8 ثوالث إلى دور الـ32. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ32 المنشورة.' : activeLeague.startsWith('uefa.') && Number(seasonYear) >= 2024 ? 'المراكز 1–8 إلى دور الـ16، والمراكز 9–24 إلى الملحق. المراكز الحالية لا تعني ضمان التأهل قبل اكتمال مرحلة الدوري.' : 'تُعرض قواعد التأهل وفق موسم البطولة المتاح.'}</p>
         {knockoutError && subTab === 'groups' && <button type="button" className="tab-btn" onClick={() => setKnockoutRetry(n => n + 1)}>تعذر التحقق من المتأهلين — إعادة المحاولة</button>}
       </div>}
+      {suppressDomesticZones && standingsGroups.length > 0 && (
+        <div className="glass-card request-state" role="note" style={{ marginBottom: 10 }}>
+          <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            ملاحظة: يتم إخفاء شارات التأهل والهبوط الحديثة في المواسم التاريخية المحلية لتفادي عرض لوائح غير مطابقة لذلك الموسم.
+          </p>
+        </div>
+      )}
+
       {/* المحتوى الرئيسي */}
-      {isTournament(activeLeague) && subTab === 'knockout' ? (
+      {hasInvalidSeason && standingsData === null ? (
+        <div className="glass-card empty-state" role="alert" style={{ padding: '36px 20px', textAlign: 'center' }}>
+          <p style={{ marginBottom: 14 }}>
+            {isEgyptianHistoricalRequest
+              ? 'الدوري المصري يعرض بيانات تجريبية للموسم الحالي فقط ولا تتوفر له مواسم تاريخية.'
+              : 'الموسم المطلوب في الرابط غير صالح أو غير مدعوم لهذه البطولة.'}
+          </p>
+          <button type="button" className="tab-btn active" onClick={() => handleSeasonChange(null)}>
+            <span>العودة إلى الموسم الحالي</span>
+          </button>
+        </div>
+      ) : isTournament(activeLeague) && subTab === 'knockout' ? (
         loadingKnockout || loading ? (
           <div className="glass-card empty-state" style={{ padding: '60px 0' }}>
             <RefreshCw className="empty-icon animate-spin" size={32} style={{ animation: 'spin 1.5s linear infinite' }} />
@@ -485,7 +551,17 @@ const LeagueStandings = ({
             </table>
           </div>
         ) : error && standingsData === null ? (
-          <RequestState message={error} onRetry={() => setRetryCount(value => value + 1)} />
+          <div className="d-flex flex-column align-center gap-2">
+            <RequestState
+              message={selectedSeason !== null ? `تعذر تحميل ترتيب موسم ${selectedSeason}. قد لا يكون هذا الموسم متاحاً لهذه البطولة.` : error}
+              onRetry={() => controllerRef.current?.retry()}
+            />
+            {selectedSeason !== null && (
+              <button type="button" className="tab-btn" onClick={() => handleSeasonChange(null)}>
+                <span>العودة إلى الموسم الحالي</span>
+              </button>
+            )}
+          </div>
         ) : standingsGroups.length === 0 ? (
           <div className="glass-card empty-state">
             <p>لم نتمكن من العثور على جداول الترتيب لهذه البطولة حالياً.</p>
@@ -510,7 +586,16 @@ const LeagueStandings = ({
                   </h3>
                 )}
 
-                <div className="glass-card table-responsive" style={{ overflow: 'hidden' }}>
+                <div className="glass-card standings-table-card">
+                  <div className="standings-mobile-scroll-hint" aria-hidden="true">
+                    <span>اسحب الجدول يمينًا أو يسارًا لعرض باقي الإحصائيات</span>
+                  </div>
+                  <div
+                    className="table-responsive standings-table-scroll"
+                    role="region"
+                    aria-label={group.name || 'جدول الترتيب'}
+                    tabIndex={0}
+                  >
                   <table className="standings-table">
                     <thead>
                       <tr>
@@ -615,6 +700,7 @@ const LeagueStandings = ({
                       })}
                     </tbody>
                   </table>
+                  </div>
 
                   {/* دليل الألوان والمراكز التأهيلية والهبوط في أسفل جدول كل دوري */}
                   {legend.length > 0 && (

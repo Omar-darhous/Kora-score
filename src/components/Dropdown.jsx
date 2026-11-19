@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check } from 'lucide-react';
+import { computeMobilePortalPosition } from '../utils/dropdownPosition';
+
+const DESKTOP_PORTAL_MIN_WIDTH = 768;
 
 const Dropdown = ({
   options = [],
@@ -14,11 +18,15 @@ const Dropdown = ({
   size = 'md',
   disabled = false,
   fullWidth = false,
-  align = 'auto'
+  align = 'auto',
+  useDesktopPortal = false,
+  useMobilePortal = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState('bottom');
   const [horizAlign, setHorizAlign] = useState('right');
+  const [portalStyle, setPortalStyle] = useState(null);
+  const [scrollAreaStyle, setScrollAreaStyle] = useState(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
 
   const containerRef = useRef(null);
@@ -39,12 +47,78 @@ const Dropdown = ({
     const spaceBelow = viewportHeight - rect.bottom;
     const spaceAbove = rect.top;
     const menuEstimatedHeight = Math.min(280, options.length * 40 + 16);
+    const nextPlacement = spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+    setPlacement(nextPlacement);
 
-    if (spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow) {
-      setPlacement('top');
-    } else {
-      setPlacement('bottom');
+    const shouldDesktopPortal = useDesktopPortal && viewportWidth >= DESKTOP_PORTAL_MIN_WIDTH;
+    if (shouldDesktopPortal) {
+      const menuWidth = Math.min(Math.max(rect.width, 195), viewportWidth - 24);
+      let left = rect.right - menuWidth;
+      if (align === 'left') {
+        left = rect.left;
+      }
+      left = Math.max(12, Math.min(left, viewportWidth - menuWidth - 12));
+
+      const style = {
+        position: 'fixed',
+        left: `${Math.round(left)}px`,
+        right: 'auto',
+        minWidth: `${Math.round(menuWidth)}px`,
+        maxWidth: `${Math.min(280, viewportWidth - 24)}px`,
+        zIndex: 1300
+      };
+      if (nextPlacement === 'top') {
+        style.bottom = `${Math.round(viewportHeight - rect.top + 6)}px`;
+        style.top = 'auto';
+      } else {
+        style.top = `${Math.round(rect.bottom + 6)}px`;
+        style.bottom = 'auto';
+      }
+      setPortalStyle(style);
+      setScrollAreaStyle(null);
+      return;
     }
+
+    const shouldMobilePortal = useMobilePortal && viewportWidth < DESKTOP_PORTAL_MIN_WIDTH;
+    if (shouldMobilePortal) {
+      const vv = window.visualViewport;
+      const mobileViewportWidth = vv?.width || viewportWidth;
+      const mobileViewportHeight = vv?.height || viewportHeight;
+      const viewportOffsetTop = vv?.offsetTop || 0;
+      const viewportOffsetLeft = vv?.offsetLeft || 0;
+
+      let bottomNavHeight = 0;
+      if (typeof document !== 'undefined') {
+        const bottomNav = document.querySelector('.mobile-bottom-nav');
+        if (bottomNav) {
+          const navRect = bottomNav.getBoundingClientRect();
+          if (navRect.height > 0 && navRect.top < viewportHeight) {
+            bottomNavHeight = navRect.height;
+          }
+        }
+      }
+
+      const mobilePos = computeMobilePortalPosition({
+        triggerRect: rect,
+        viewportWidth: mobileViewportWidth,
+        viewportHeight: mobileViewportHeight,
+        layoutViewportHeight: viewportHeight,
+        viewportOffsetTop,
+        viewportOffsetLeft,
+        optionsCount: options.length,
+        align,
+        topSafeInset: 12,
+        bottomSafeInset: Math.max(12, bottomNavHeight + 10)
+      });
+
+      setPlacement(mobilePos.placement);
+      setPortalStyle(mobilePos.style);
+      setScrollAreaStyle(mobilePos.scrollAreaStyle);
+      return;
+    }
+
+    setPortalStyle(null);
+    setScrollAreaStyle(null);
 
     // تموضع أفقي (يمين / يسار في بيئة RTL)
     if (align !== 'auto') {
@@ -61,7 +135,7 @@ const Dropdown = ({
     } else {
       setHorizAlign('right');
     }
-  }, [options.length, align]);
+  }, [options.length, align, useDesktopPortal, useMobilePortal]);
 
   // فتح/إغلاق القائمة مع إعادة حساب الموقع
   const toggleOpen = () => {
@@ -98,11 +172,15 @@ const Dropdown = ({
       }
     };
 
+    const visualViewport = typeof window !== 'undefined' ? window.visualViewport : null;
+
     if (isOpen) {
       document.addEventListener('mousedown', handleOutsideInteraction);
       document.addEventListener('touchstart', handleOutsideInteraction, { passive: true });
       window.addEventListener('resize', updatePosition);
       window.addEventListener('scroll', updatePosition, true);
+      visualViewport?.addEventListener('resize', updatePosition);
+      visualViewport?.addEventListener('scroll', updatePosition);
     }
 
     return () => {
@@ -110,6 +188,8 @@ const Dropdown = ({
       document.removeEventListener('touchstart', handleOutsideInteraction);
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
+      visualViewport?.removeEventListener('resize', updatePosition);
+      visualViewport?.removeEventListener('scroll', updatePosition);
     };
   }, [isOpen, handleClose, updatePosition]);
 
@@ -171,6 +251,65 @@ const Dropdown = ({
     if (triggerRef.current) triggerRef.current.focus();
   };
 
+  const dropdownMenu = (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          ref={menuRef}
+          className={`custom-dropdown-menu ${portalStyle ? 'portal-menu' : `placement-${placement} align-${horizAlign}`}`}
+          style={portalStyle || undefined}
+          role="listbox"
+          aria-label={ariaLabel}
+          tabIndex={-1}
+          initial={{ opacity: 0, scale: 0.96, y: placement === 'bottom' ? -6 : 6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: placement === 'bottom' ? -6 : 6 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+        >
+          <div className="custom-dropdown-scroll-area" style={scrollAreaStyle || undefined}>
+            {options.length === 0 ? (
+              <div className="custom-dropdown-empty">لا توجد خيارات متاحة</div>
+            ) : (
+              options.map((opt, index) => {
+                const isSelected = opt.value === value;
+                const isFocused = index === focusedIndex;
+
+                return (
+                  <div
+                    key={opt.value}
+                    ref={isSelected ? selectedItemRef : null}
+                    role="option"
+                    aria-selected={isSelected}
+                    aria-disabled={opt.disabled}
+                    className={`custom-dropdown-option ${isSelected ? 'selected' : ''} ${isFocused ? 'focused' : ''} ${opt.disabled ? 'disabled' : ''}`}
+                    onClick={() => handleSelect(opt.value, opt.disabled)}
+                    onMouseEnter={() => setFocusedIndex(index)}
+                  >
+                    <div className="dropdown-option-left">
+                      {opt.icon && (
+                        <img
+                          src={opt.icon}
+                          alt=""
+                          className="dropdown-option-img"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      )}
+                      <span className="dropdown-option-label">{opt.label}</span>
+                    </div>
+
+                    {isSelected && (
+                      <Check size={15} className="dropdown-check-icon" aria-hidden="true" />
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <div
       ref={containerRef}
@@ -210,62 +349,10 @@ const Dropdown = ({
         />
       </button>
 
-      {/* Dropdown Menu Popover */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            ref={menuRef}
-            className={`custom-dropdown-menu placement-${placement} align-${horizAlign}`}
-            role="listbox"
-            aria-label={ariaLabel}
-            tabIndex={-1}
-            initial={{ opacity: 0, scale: 0.96, y: placement === 'bottom' ? -6 : 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: placement === 'bottom' ? -6 : 6 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
-          >
-            <div className="custom-dropdown-scroll-area">
-              {options.length === 0 ? (
-                <div className="custom-dropdown-empty">لا توجد خيارات متاحة</div>
-              ) : (
-                options.map((opt, index) => {
-                  const isSelected = opt.value === value;
-                  const isFocused = index === focusedIndex;
-
-                  return (
-                    <div
-                      key={opt.value}
-                      ref={isSelected ? selectedItemRef : null}
-                      role="option"
-                      aria-selected={isSelected}
-                      aria-disabled={opt.disabled}
-                      className={`custom-dropdown-option ${isSelected ? 'selected' : ''} ${isFocused ? 'focused' : ''} ${opt.disabled ? 'disabled' : ''}`}
-                      onClick={() => handleSelect(opt.value, opt.disabled)}
-                      onMouseEnter={() => setFocusedIndex(index)}
-                    >
-                      <div className="dropdown-option-left">
-                        {opt.icon && (
-                          <img
-                            src={opt.icon}
-                            alt=""
-                            className="dropdown-option-img"
-                            onError={(e) => { e.target.style.display = 'none'; }}
-                          />
-                        )}
-                        <span className="dropdown-option-label">{opt.label}</span>
-                      </div>
-
-                      {isSelected && (
-                        <Check size={15} className="dropdown-check-icon" aria-hidden="true" />
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Dropdown Menu Popover (Portal on desktop when enabled to avoid ancestor overflow clipping) */}
+      {portalStyle && typeof document !== 'undefined'
+        ? createPortal(dropdownMenu, document.body)
+        : dropdownMenu}
     </div>
   );
 };
