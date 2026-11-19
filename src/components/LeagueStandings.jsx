@@ -228,7 +228,7 @@ const getRankStyleAndText = (leagueId, rank) => {
 const getLegendItems = (leagueId) => {
   const items = [];
   const addedLabels = new Set();
-  
+
   // نفحص المراكز من 1 إلى 20
   for (let r = 1; r <= 20; r++) {
     const zone = getRankStyleAndText(leagueId, r);
@@ -255,7 +255,7 @@ const LeagueStandings = ({
 }) => {
   const leagues = getLeagues();
   const [internalLeague, setInternalLeague] = useState(leagues[0].id);
-  
+
   const activeLeague = propActiveLeague !== undefined ? propActiveLeague : internalLeague;
   const setActiveLeague = (newLeague) => {
     if (onLeagueChange) {
@@ -272,7 +272,7 @@ const LeagueStandings = ({
 
   const standingsGroups = standingsData !== null ? standingsData : internalStandingsGroups;
   const loading = propLoading !== null ? propLoading : (standingsData !== null ? false : internalLoading);
-  
+
   // حالات الأدوار الإقصائية
   const [subTab, setSubTab] = useState('groups'); // groups | knockout
   const [knockoutData, setKnockoutData] = useState(null);
@@ -294,7 +294,7 @@ const LeagueStandings = ({
       setInternalLoading(true);
       setError(null);
       try {
-        const data = await getStandings(activeLeague, { strict: true });
+        const data = await getStandings(activeLeague, { strict: true, forceRefresh: retryCount > 0 });
         if (isMounted) {
           setInternalStandingsGroups(data);
         }
@@ -376,10 +376,10 @@ const LeagueStandings = ({
           {/* اختيار البطولة في الهواتف الذكية عبر Dropdown موحد */}
           <div className="standings-mobile-dropdown">
             <Dropdown
-              options={leagues.map(l => ({ 
-                value: l.id, 
-                label: l.id === 'egypt.1' ? `${l.name} (${EGYPTIAN_BADGE_TEXT})` : l.name, 
-                icon: l.logo 
+              options={leagues.map(l => ({
+                value: l.id,
+                label: l.id === 'egypt.1' ? `${l.name} (${EGYPTIAN_BADGE_TEXT})` : l.name,
+                icon: l.logo
               }))}
               value={activeLeague}
               onChange={setActiveLeague}
@@ -398,12 +398,16 @@ const LeagueStandings = ({
                 onClick={() => setActiveLeague(league.id)}
               >
                 <span className="d-flex align-center gap-1">
-                  <img 
-                    src={league.logo} 
-                    alt={league.name} 
-                    style={{ width: 18, height: 18, objectFit: 'contain' }} 
-                    onError={(e) => e.target.style.display = 'none'}
-                  />
+                  {league.logo ? (
+                    <img
+                      src={league.logo}
+                      alt={league.name}
+                      style={{ width: 18, height: 18, objectFit: 'contain' }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <Trophy size={16} color="var(--accent)" />
+                  )}
                   <span>{league.name}</span>
                   {league.id === 'egypt.1' && <EgyptianBadge style={{ marginRight: 4 }} />}
                 </span>
@@ -452,8 +456,8 @@ const LeagueStandings = ({
           <RequestState message={knockoutError} onRetry={() => setKnockoutRetry(n => n + 1)} />
         ) : (
           <KnockoutBracket key={activeLeague + seasonYear}
-            bracketData={knockoutData} 
-            onMatchClick={onMatchClick} 
+            bracketData={knockoutData}
+            onMatchClick={onMatchClick}
           />
         )
       ) : (
@@ -492,12 +496,12 @@ const LeagueStandings = ({
               <div key={groupIdx} className="d-flex flex-column gap-1">
                 {/* عرض اسم المجموعة إذا كان هناك أكثر من مجموعة واحدة (مثل كأس العالم) */}
                 {standingsGroups.length > 1 && (
-                  <h3 
-                    style={{ 
-                      fontSize: '1.1rem', 
-                      fontWeight: 800, 
-                      color: 'var(--accent)', 
-                      padding: '8px 4px', 
+                  <h3
+                    style={{
+                      fontSize: '1.1rem',
+                      fontWeight: 800,
+                      color: 'var(--accent)',
+                      padding: '8px 4px',
                       borderBottom: '1px solid var(--border-color)',
                       marginTop: groupIdx > 0 ? 12 : 0
                     }}
@@ -531,11 +535,11 @@ const LeagueStandings = ({
                             transition={{ delay: idx * 0.04 }}
                             style={zone ? { backgroundColor: zone.bg } : undefined}
                           >
-                            <td 
-                              className="team-rank" 
+                            <td
+                              className="team-rank"
                               style={zone ? { borderRight: zone.borderRight, textAlign: 'center' } : { textAlign: 'center' }}
                             >
-                              <span 
+                              <span
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
@@ -614,24 +618,24 @@ const LeagueStandings = ({
 
                   {/* دليل الألوان والمراكز التأهيلية والهبوط في أسفل جدول كل دوري */}
                   {legend.length > 0 && (
-                    <div className="standings-legend" style={{ 
-                      display: 'flex', 
-                      flexWrap: 'wrap', 
-                      gap: '16px', 
-                      padding: '16px 20px', 
-                      borderTop: '1px solid var(--border-color)', 
+                    <div className="standings-legend" style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '16px',
+                      padding: '16px 20px',
+                      borderTop: '1px solid var(--border-color)',
                       backgroundColor: 'rgba(0, 0, 0, 0.15)',
                       fontSize: '0.75rem',
                       fontWeight: 500
                     }}>
                       {legend.map((item, idx) => (
                         <div key={idx} className="d-flex align-center gap-1">
-                          <span style={{ 
-                            display: 'inline-block', 
-                            width: '10px', 
-                            height: '10px', 
-                            borderRadius: '2px', 
-                            backgroundColor: item.color 
+                          <span style={{
+                            display: 'inline-block',
+                            width: '10px',
+                            height: '10px',
+                            borderRadius: '2px',
+                            backgroundColor: item.color
                           }}></span>
                           <span style={{ color: 'var(--text-secondary)' }}>{item.label}</span>
                         </div>

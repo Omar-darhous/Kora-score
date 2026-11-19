@@ -40,3 +40,30 @@ export function finishedMatchLabel(match) {
   if (match.finishType === 'extra-time') return 'انتهت بعد الأشواط الإضافية';
   return 'انتهت';
 }
+export function isUpcomingMatch(match) {
+  return ['NS', 'UPCOMING'].includes(match?.status);
+}
+export function getFavoriteMatchDisplay(match = {}) {
+  const isEgyMatch = match.leagueId === 'egypt.1';
+  const isUpcoming = isUpcomingMatch(match);
+  const isLive = match.status === 'LIVE';
+  const isFinished = ['FT', 'FINISHED'].includes(match.status);
+  let statusLabel = 'لم تبدأ';
+  if (isEgyMatch) {
+    if (isLive) statusLabel = 'جارية (تجريبية)';
+    else if (isFinished) statusLabel = finishedMatchLabel(match) + ' (تجريبية)';
+    else statusLabel = match.time || 'مجدولة (تجريبية)';
+  } else {
+    if (isLive) statusLabel = `مباشر • ${match.minute || ''}`;
+    else if (isFinished) statusLabel = finishedMatchLabel(match);
+    else statusLabel = match.time || 'قادمة';
+  }
+  return {
+    isEgyMatch,
+    isUpcoming,
+    isLive,
+    isFinished,
+    statusLabel,
+    centerText: isUpcoming ? 'VS' : `${match.homeScore} - ${match.awayScore}`
+  };
+}

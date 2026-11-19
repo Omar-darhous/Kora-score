@@ -1941,9 +1941,22 @@ select option {
 .news-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.news-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .news-title {
@@ -4271,7 +4284,8 @@ select option {
 .kb-round-title { position:absolute; top:0; width:300px; display:flex; align-items:center; justify-content:space-between; padding:0 6px 12px; border-bottom:2px solid var(--primary); color:var(--text-primary); }
 .kb-round-title small { font-size:.7rem; color:var(--text-muted); font-weight:400; }
 .kb-node { position:absolute; width:300px; height:202px; }
-.kb-card { width:300px; height:202px; padding:13px; border-radius:13px; border:1px solid var(--border-medium); background:var(--bg-surface-elevated); color:var(--text-primary); text-align:right; font:inherit; cursor:pointer; display:flex; flex-direction:column; gap:9px; box-shadow:0 6px 20px #00000012; transition:border-color .18s,box-shadow .18s; }
+.kb-card-wrap { position:relative; width:300px; height:202px; }
+.kb-card { width:300px; height:202px; padding:12px 13px; border-radius:13px; border:1px solid var(--border-medium); background:var(--bg-surface-elevated); color:var(--text-primary); text-align:right; font:inherit; cursor:pointer; display:flex; flex-direction:column; gap:7px; box-shadow:0 6px 20px #00000012; transition:border-color .18s,box-shadow .18s; }
 .kb-card:hover,.kb-card:focus-visible,.kb-highlight { border-color:var(--primary); box-shadow:0 0 0 2px var(--primary-light); outline:none; }
 .kb-final { border-color:var(--accent); background:linear-gradient(135deg,var(--bg-surface-elevated),var(--bg-surface)); }
 .kb-card-top { display:flex; justify-content:space-between; gap:5px; align-items:center; font-size:.65rem; color:var(--text-muted); }
@@ -4279,9 +4293,9 @@ select option {
 .kb-card-top strong { font-weight:600; padding:3px 6px; background:var(--primary-light); border-radius:5px; color:var(--primary); }
 .kb-card-top .kb-pen-tag { color:var(--accent); background:#f59e0b18; }
 .kb-score-table { width:100%; border-collapse:collapse; table-layout:fixed; }
-.kb-score-table th { font-size:.63rem; font-weight:500; color:var(--text-muted); padding-bottom:5px; text-align:center; width:37px; }
+.kb-score-table th { font-size:.63rem; font-weight:500; color:var(--text-muted); padding-bottom:5px; text-align:center; width:34px; }
 .kb-score-table th:first-child { width:auto; text-align:right; }
-.kb-score-table td { padding:6px 0; font-size:.82rem; text-align:center; font-variant-numeric:tabular-nums; }
+.kb-score-table td { padding:5px 0; font-size:.82rem; text-align:center; font-variant-numeric:tabular-nums; }
 .kb-score-table tr+tr td { border-top:1px solid var(--border-subtle); }
 .kb-team { display:flex; align-items:center; gap:7px; text-align:right; font-size:.77rem; font-weight:500; }
 .kb-team img { width:21px; height:21px; object-fit:contain; flex-shrink:0; }
@@ -4289,7 +4303,11 @@ select option {
 .kb-winner td { color:var(--primary); font-weight:800; }
 .kb-winner .kb-team { font-weight:800; color:var(--text-primary); }
 .kb-win-dot { display:inline-block; width:6px; height:6px; flex-shrink:0; border-radius:50%; background:var(--primary); }
+.kb-agg-score { font-weight:800; background:var(--primary-light); border-radius:4px; }
 .kb-pen-score { background:#f59e0b0c; }
+.kb-leg-links { position:absolute; bottom:8px; left:10px; display:flex; gap:4px; z-index:2; }
+.kb-leg-btn { background:var(--bg-surface); color:var(--text-secondary); border:1px solid var(--border-subtle); border-radius:5px; padding:2px 6px; font:inherit; font-size:.6rem; font-weight:600; cursor:pointer; }
+.kb-leg-btn:hover,.kb-leg-btn:focus-visible { border-color:var(--primary); color:var(--primary); outline:none; }
 .kb-progress { display:flex; gap:5px; align-items:flex-start; font-size:.65rem; line-height:1.5; color:var(--text-secondary); border-top:1px solid var(--border-subtle); padding-top:8px; margin-top:auto; }
 .kb-progress svg { flex-shrink:0; color:var(--primary); margin-top:2px; }
 .kb-progress>span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }

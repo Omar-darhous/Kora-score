@@ -516,10 +516,10 @@ export const searchAll = ({ query = '', matches = [], leagues = [] }) => {
 export const getQuickSuggestions = () => {
   return {
     popularLeagues: [
-      { id: 'eng.1', name: 'الدوري الإنجليزي الممتاز', logo: 'https://a.espncdn.com/i/league-logos/soccer/500/23.png' },
-      { id: 'esp.1', name: 'الدوري الإسباني', logo: 'https://a.espncdn.com/i/league-logos/soccer/500/15.png' },
-      { id: 'uefa.champions', name: 'دوري أبطال أوروبا', logo: 'https://a.espncdn.com/i/league-logos/soccer/500/2.png' },
-      { id: 'ksa.1', name: 'دوري روشن السعودي', logo: 'https://a.espncdn.com/i/teamlogos/soccer/500/350.png' }
+      { id: 'eng.1', name: 'الدوري الإنجليزي الممتاز', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/23.png' },
+      { id: 'esp.1', name: 'الدوري الإسباني', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/15.png' },
+      { id: 'uefa.champions', name: 'دوري أبطال أوروبا', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/2.png' },
+      { id: 'ksa.1', name: 'دوري روشن السعودي', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/2488.png' }
     ],
     popularTeams: [
       { id: '86', name: 'ريال مدريد', leagueName: 'الدوري الإسباني', logo: 'https://a.espncdn.com/i/teamlogos/soccer/500/86.png', isMock: false },

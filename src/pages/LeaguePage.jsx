@@ -1,6 +1,6 @@
 import { finishedMatchLabel } from '../services/matchResult';
 import RequestState from '../components/RequestState';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -17,8 +17,10 @@ import {
 } from 'lucide-react';
 import LeagueStandings from '../components/LeagueStandings';
 import FavoriteButton from '../components/FavoriteButton';
-import { getStandings } from '../services/footballService';
+import { createStandingsController } from '../services/footballService';
 import { EgyptianDisclaimer, EgyptianBadge } from '../components/EgyptianDisclaimer';
+
+const EMPTY_STANDINGS = [];
 
 const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, matchesError, onRetryMatches }) => {
   const { leagueId } = useParams();
@@ -33,10 +35,19 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
   const [activeTab, setActiveTab] = useState('standings'); // 'standings' | 'matches' | 'teams'
 
   // حالة بيانات الترتيب والموسم (مالك الطلب الأوحد لمنع تكرار جلب البيانات)
-  const [standings, setStandings] = useState([]);
-  const [loadingStandings, setLoadingStandings] = useState(true);
-  const [errorStandings, setErrorStandings] = useState(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [standingsState, setStandingsState] = useState({
+    leagueId,
+    standings: [],
+    loading: true,
+    error: null,
+    isStale: false
+  });
+  const controllerRef = useRef(null);
+
+  const standings = standingsState.leagueId === leagueId ? standingsState.standings : EMPTY_STANDINGS;
+  const loadingStandings = standingsState.leagueId === leagueId ? standingsState.loading : true;
+  const errorStandings = standingsState.leagueId === leagueId ? standingsState.error : null;
+  const isStaleStandings = standingsState.leagueId === leagueId ? standingsState.isStale : false;
 
   // الرجوع الآمن للصفحة السابقة أو العودة للترتيب العام
   const handleSafeBack = () => {
@@ -48,36 +59,24 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
     }
   };
 
-  // جلب بيانات الترتيب والموسم مرة واحدة فقط
+  // جلب بيانات الترتيب والموسم مع دعم إعادة المحاولة وتنظيف الطلبات عند إلغاء التحميل
   useEffect(() => {
     if (!league) return;
 
-    let isMounted = true;
-    const fetchLeagueData = async () => {
-      setLoadingStandings(true);
-      setErrorStandings(null);
-      try {
-        const data = await getStandings(leagueId, { strict: true });
-        if (isMounted) {
-          setStandings(data);
-        }
-      } catch (err) {
-        if (isMounted) {
-          console.error('Error fetching league data:', err);
-          setErrorStandings('تعذر جلب بيانات البطولة، يرجى المحاولة مرة أخرى.');
-        }
-      } finally {
-        if (isMounted) {
-          setLoadingStandings(false);
-        }
-      }
-    };
+    const controller = createStandingsController({
+      onStateChange: setStandingsState
+    });
+    controllerRef.current = controller;
+    controller.load(leagueId);
 
-    fetchLeagueData();
     return () => {
-      isMounted = false;
+      controller.dispose();
     };
-  }, [leagueId, league, retryCount]);
+  }, [leagueId, league]);
+
+  const handleRetryStandings = useCallback(() => {
+    controllerRef.current?.retry();
+  }, []);
 
   // استخراج البيانات الوصفية للموسم من كائن المجموعة الأولى group.season حصراً
   const seasonMetadata = useMemo(() => {
@@ -300,13 +299,14 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
         {/* التبويب الأول: جدول الترتيب والأدوار الإقصائية (إعادة استخدام كاملة للمكون الأصلي دون تكرار للطلب) */}
         {activeTab === 'standings' && (
           <div className="league-standings-section">
-            {errorStandings ? (
-              <div className="glass-card empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
+            {errorStandings && standings.length === 0 ? (
+              <div className="glass-card empty-state" style={{ padding: '40px 20px', textAlign: 'center' }} role="alert">
                 <AlertCircle size={32} color="var(--danger)" style={{ marginBottom: 12 }} />
                 <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>{errorStandings}</p>
                 <button
                   type="button"
-                  onClick={() => setRetryCount(value => value + 1)}
+                  onClick={handleRetryStandings}
+                  disabled={loadingStandings}
                   className="tab-btn active"
                 >
                   <RefreshCw size={14} />
@@ -314,14 +314,30 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
                 </button>
               </div>
             ) : (
-              <LeagueStandings
-                activeLeague={leagueId}
-                standingsData={standings}
-                loading={loadingStandings}
-                hideLeagueSelector={true}
-                showTitle={false}
-                onMatchClick={onMatchClick}
-              />
+              <>
+                {errorStandings && isStaleStandings && (
+                  <div className="glass-card request-state" role="alert" style={{ marginBottom: 14 }}>
+                    <p style={{ margin: 0 }}>{errorStandings} — يتم عرض آخر نسخة صالحة محمّلة.</p>
+                    <button
+                      type="button"
+                      onClick={handleRetryStandings}
+                      disabled={loadingStandings}
+                      className="tab-btn active"
+                    >
+                      <RefreshCw size={14} />
+                      <span>إعادة المحاولة</span>
+                    </button>
+                  </div>
+                )}
+                <LeagueStandings
+                  activeLeague={leagueId}
+                  standingsData={standings}
+                  loading={loadingStandings}
+                  hideLeagueSelector={true}
+                  showTitle={false}
+                  onMatchClick={onMatchClick}
+                />
+              </>
             )}
           </div>
         )}
@@ -447,11 +463,25 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
               </h3>
             </div>
 
-            {loadingStandings ? (
+            {loadingStandings && standings.length === 0 ? (
               <div className="league-teams-grid">
                 {[...Array(8)].map((_, i) => (
                   <div key={i} className="league-team-card skeleton-pulse" style={{ height: 90 }} />
                 ))}
+              </div>
+            ) : errorStandings && standings.length === 0 ? (
+              <div className="glass-card empty-state" style={{ padding: '40px 20px', textAlign: 'center' }} role="alert">
+                <AlertCircle size={32} color="var(--danger)" style={{ marginBottom: 12 }} />
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>{errorStandings}</p>
+                <button
+                  type="button"
+                  onClick={handleRetryStandings}
+                  disabled={loadingStandings}
+                  className="tab-btn active"
+                >
+                  <RefreshCw size={14} />
+                  <span>إعادة المحاولة</span>
+                </button>
               </div>
             ) : standings.length === 0 ? (
               <div className="glass-card empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
@@ -459,6 +489,20 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
               </div>
             ) : (
               <div className="d-flex flex-column gap-4">
+                {errorStandings && isStaleStandings && (
+                  <div className="glass-card request-state" role="alert">
+                    <p style={{ margin: 0 }}>{errorStandings} — يتم عرض آخر نسخة صالحة محمّلة.</p>
+                    <button
+                      type="button"
+                      onClick={handleRetryStandings}
+                      disabled={loadingStandings}
+                      className="tab-btn active"
+                    >
+                      <RefreshCw size={14} />
+                      <span>إعادة المحاولة</span>
+                    </button>
+                  </div>
+                )}
                 {standings.map((group, gIdx) => (
                   <div key={gIdx} className="league-teams-group">
                     {/* إظهار اسم المجموعة إذا كانت البطولة بنظام المجموعات (كأس العالم) */}

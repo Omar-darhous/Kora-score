@@ -1,12 +1,43 @@
 import { cachedJson } from './requestCache.js';
 import { parseMatchResult } from './matchResult.js';
 import { classifyRound, rounds } from './tournamentRules.js';
+import { defaultNewsFetcher } from './newsService.js';
 // خدمة جلب بيانات كرة القدم الحية والحقيقية بالكامل من واجهات ESPN المفتوحة وموجز الأخبار DW الرياضي
 
 import { LEAGUES } from './mockData.js';
 
 // قائمة بالصور الافتراضية عالية الجودة لتبديلها في الأخبار
 
+
+export const DEFAULT_TEAM_LOGO = 'https://a.espncdn.com/i/teamlogos/soccer/500/default-team-logo-500.png';
+
+const isValidLogoUrl = (url, entityType = 'team') => {
+  if (typeof url !== 'string') return false;
+  const clean = url.trim();
+  if (!/^https?:\/\//i.test(clean)) return false;
+  if (
+    clean.includes('/i/league-logos/') ||
+    clean.includes('/teamlogos/default-soccer.png') ||
+    clean.includes('Egyptian_Premier_League_logo.png')
+  ) {
+    return false;
+  }
+  if (entityType === 'league' && clean.includes('/i/teamlogos/')) return false;
+  if (entityType === 'team' && clean.includes('/i/leaguelogos/')) return false;
+  return true;
+};
+
+export const resolveLeagueLogo = (apiLeague, fallbackLogo = '') => {
+  const candidates = [apiLeague?.logos?.[0]?.href, apiLeague?.logo, fallbackLogo];
+  return candidates.find((url) => isValidLogoUrl(url, 'league')) || '';
+};
+
+export const resolveTeamLogo = (team, fallbackLogo = DEFAULT_TEAM_LOGO) => {
+  const candidates = [team?.logo, team?.logos?.[0]?.href];
+  const valid = candidates.find((url) => isValidLogoUrl(url, 'team'));
+  if (valid) return valid;
+  return isValidLogoUrl(fallbackLogo, 'team') ? fallbackLogo : '';
+};
 
 export const getLeagues = () => {
   return LEAGUES;
@@ -19,13 +50,13 @@ const getMockEgyptianMatches = () => {
       id: 'egy-match-1',
       leagueId: 'egypt.1',
       leagueName: 'الدوري المصري الممتاز',
-      leagueLogo: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Egyptian_Premier_League_logo.png',
+      leagueLogo: '',
       homeTeam: 'الأهلي',
       homeLogo: '', // فارغ لحذف الشعار
       homeScore: 2,
       homeTeamId: 'egy-team-ahly',
       awayTeam: 'الزمالك',
-      awayLogo: '', 
+      awayLogo: '',
       awayScore: 1,
       awayTeamId: 'egy-team-zamalek',
       status: 'FT',
@@ -58,7 +89,7 @@ const getMockEgyptianMatches = () => {
       id: 'egy-match-2',
       leagueId: 'egypt.1',
       leagueName: 'الدوري المصري الممتاز',
-      leagueLogo: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Egyptian_Premier_League_logo.png',
+      leagueLogo: '',
       homeTeam: 'بيراميدز',
       homeLogo: '',
       homeScore: 3,
@@ -95,7 +126,7 @@ const getMockEgyptianMatches = () => {
       id: 'egy-match-3',
       leagueId: 'egypt.1',
       leagueName: 'الدوري المصري الممتاز',
-      leagueLogo: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Egyptian_Premier_League_logo.png',
+      leagueLogo: '',
       homeTeam: 'المصري البورسعيدي',
       homeLogo: '',
       homeScore: 1,
@@ -154,6 +185,11 @@ const translateRoundText = (text) => {
   return text;
 };
 
+// الاحتفاظ بآخر نسخة صالحة معروفة لكل بطولة وتاريخ لمنع فقدان المباريات عند تعثر طلب بطولة واحدة مؤقتاً
+const leagueMatchesSnapshot = new Map();
+const latestSnapshotVersion = new Map();
+let snapshotSequence = 0;
+
 // جلب المباريات الحقيقية لجميع الدوريات في تاريخ معين (تنسيق YYYYMMDD)
 export const getMatches = async (dateStr, { strict = false, onPartial, forceRefresh = false } = {}) => {
   if (!dateStr) {
@@ -177,10 +213,12 @@ export const getMatches = async (dateStr, { strict = false, onPartial, forceRefr
         return [];
       }
 
+      const snapshotKey = `${league.id}:${dateStr}`;
+      const requestVersion = ++snapshotSequence;
       try {
         const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.id}/scoreboard?dates=${dateStr}`;
         const data = await cachedJson(url, { ttl: 15000, forceRefresh });
-        
+
         let fallbackRound = '';
         const calendar = data.leagues?.[0]?.calendar || [];
         if (calendar.length > 0) {
@@ -204,16 +242,16 @@ export const getMatches = async (dateStr, { strict = false, onPartial, forceRefr
         }
 
         const events = data.events || [];
-        return events.map(event => {
+        const mappedMatches = events.map(event => {
           const comp = event.competitions?.[0] || {};
           const homeCompetitor = comp.competitors?.find(c => c.homeAway === 'home') || {};
           const awayCompetitor = comp.competitors?.find(c => c.homeAway === 'away') || {};
-          
-          let statusStr = 'NS'; 
+
+          let statusStr = 'NS';
           if (event.status?.type?.state === 'in') {
-            statusStr = 'LIVE'; 
+            statusStr = 'LIVE';
           } else if (event.status?.type?.state === 'post') {
-            statusStr = 'FT'; 
+            statusStr = 'FT';
           }
 
           const matchTime = new Date(event.date).toLocaleTimeString('ar-EG', {
@@ -240,13 +278,13 @@ export const getMatches = async (dateStr, { strict = false, onPartial, forceRefr
             id: event.id,
             leagueId: league.id,
             leagueName: league.name,
-            leagueLogo: league.logo,
+            leagueLogo: resolveLeagueLogo(data.leagues?.[0], league.logo),
             homeTeam: homeCompetitor.team?.displayName || 'فريق مستضيف',
-            homeLogo: homeCompetitor.team?.logo || 'https://a.espncdn.com/i/teamlogos/default-soccer.png',
+            homeLogo: resolveTeamLogo(homeCompetitor.team),
             homeScore: parseInt(homeCompetitor.score) || 0,
             homeTeamId: homeCompetitor.team?.id,
             awayTeam: awayCompetitor.team?.displayName || 'فريق ضيف',
-            awayLogo: awayCompetitor.team?.logo || 'https://a.espncdn.com/i/teamlogos/default-soccer.png',
+            awayLogo: resolveTeamLogo(awayCompetitor.team),
             awayScore: parseInt(awayCompetitor.score) || 0,
             awayTeamId: awayCompetitor.team?.id,
             status: statusStr,
@@ -257,9 +295,26 @@ export const getMatches = async (dateStr, { strict = false, onPartial, forceRefr
             detailsLoaded: false
           };
         });
+
+        const completedVersion = latestSnapshotVersion.get(snapshotKey) || 0;
+        if (requestVersion < completedVersion && leagueMatchesSnapshot.has(snapshotKey)) {
+          return structuredClone(leagueMatchesSnapshot.get(snapshotKey));
+        }
+
+        while (leagueMatchesSnapshot.size >= 100 && !leagueMatchesSnapshot.has(snapshotKey)) {
+          const oldestKey = leagueMatchesSnapshot.keys().next().value;
+          leagueMatchesSnapshot.delete(oldestKey);
+          latestSnapshotVersion.delete(oldestKey);
+        }
+        latestSnapshotVersion.set(snapshotKey, requestVersion);
+        leagueMatchesSnapshot.set(snapshotKey, structuredClone(mappedMatches));
+        return mappedMatches;
       } catch (err) {
         failedRequests += 1;
         console.error(`Error fetching matches for league ${league.id}:`, err);
+        if (leagueMatchesSnapshot.has(snapshotKey)) {
+          return structuredClone(leagueMatchesSnapshot.get(snapshotKey));
+        }
         return [];
       }
     });
@@ -267,7 +322,15 @@ export const getMatches = async (dateStr, { strict = false, onPartial, forceRefr
     const results = await Promise.all(promises);
     if (strict && failedRequests === activeLeagues.filter(league => league.id !== 'egypt.1').length) throw new Error("Match schedule unavailable");
     if (failedRequests > 0) onPartial?.();
-    const allMatches = results.flat();
+
+    const seenMatches = new Set();
+    const allMatches = results.flat().filter(match => {
+      if (!match || match.id === undefined || match.id === null) return false;
+      const matchKey = `${match.leagueId}:${match.id}`;
+      if (seenMatches.has(matchKey)) return false;
+      seenMatches.add(matchKey);
+      return true;
+    });
 
     return allMatches.sort((a, b) => {
       const statusOrder = { 'LIVE': 1, 'NS': 2, 'FT': 3 };
@@ -408,34 +471,62 @@ export const getMatchDetails = async (leagueId, eventId) => {
 
 // الاشتراك في تحديثات المباريات المباشرة
 let liveRefreshInterval = null;
+let clearLiveRefreshInterval = clearInterval;
 let subscribers = [];
+let lastNotifiedSignature = null;
+let isLivePolling = false;
 
-export const subscribeToLiveMatches = (callback) => {
-  subscribers.push(callback);
+export const subscribeToLiveMatches = (
+  callback,
+  {
+    intervalMs = 30000,
+    dateStr: fixedDateStr,
+    setIntervalFn = setInterval,
+    clearIntervalFn = clearInterval
+  } = {}
+) => {
+  if (typeof callback === 'function' && !subscribers.includes(callback)) {
+    subscribers.push(callback);
+    lastNotifiedSignature = null;
+  }
 
   if (!liveRefreshInterval) {
-    liveRefreshInterval = setInterval(async () => {
+    clearLiveRefreshInterval = clearIntervalFn;
+    liveRefreshInterval = setIntervalFn(async () => {
+      if (isLivePolling || subscribers.length === 0) return;
+      isLivePolling = true;
+
       const today = new Date();
       const yyyy = today.getFullYear();
       const mm = String(today.getMonth() + 1).padStart(2, '0');
       const dd = String(today.getDate()).padStart(2, '0');
-      const dateStr = `${yyyy}${mm}${dd}`;
+      const dateStr = fixedDateStr || `${yyyy}${mm}${dd}`;
 
       try {
-        let partial = false;
-        const currentMatches = await getMatches(dateStr, { strict: true, forceRefresh: true, onPartial: () => { partial = true; } });
-        if (!partial) subscribers.forEach(sub => sub(currentMatches));
+        const currentMatches = await getMatches(dateStr, {
+          strict: true,
+          forceRefresh: true
+        });
+        const signature = JSON.stringify(currentMatches);
+        if (signature !== lastNotifiedSignature) {
+          lastNotifiedSignature = signature;
+          subscribers.slice().forEach(sub => sub(structuredClone(currentMatches)));
+        }
       } catch {
-        // Keep the last successful snapshot when background refresh fails.
+        // Keep the last successful snapshot when all competitions fail.
+      } finally {
+        isLivePolling = false;
       }
-    }, 30000); 
+    }, intervalMs);
   }
 
   return () => {
     subscribers = subscribers.filter(sub => sub !== callback);
-    if (subscribers.length === 0 && liveRefreshInterval) {
-      clearInterval(liveRefreshInterval);
+    if (subscribers.length === 0 && liveRefreshInterval !== null) {
+      clearLiveRefreshInterval(liveRefreshInterval);
       liveRefreshInterval = null;
+      lastNotifiedSignature = null;
+      isLivePolling = false;
     }
   };
 };
@@ -478,7 +569,7 @@ const parseStandingsEntries = (entries) => {
       qualificationNote: item.note?.description || '',
       rank: getStatVal('rank') || item.rank || 0,
       team: item.team?.displayName || 'فريق كروي',
-      logo: item.team?.logos?.[0]?.href || 'https://a.espncdn.com/i/teamlogos/default-soccer.png',
+      logo: resolveTeamLogo(item.team),
       played: getStatVal('gamesPlayed'),
       win: getStatVal('wins'),
       draw: getStatVal('ties'),
@@ -506,7 +597,7 @@ const parseStandingsEntries = (entries) => {
 };
 
 // جلب ترتيب الدوري الحقيقي (الدوري المصري الحالي المحدث لموسم 2025/2026 بدون شعارات أندية)
-export const getStandings = async (leagueId = 'eng.1', { strict = false } = {}) => {
+export const getStandings = async (leagueId = 'eng.1', { strict = false, forceRefresh = false } = {}) => {
   if (leagueId === 'egypt.1') {
     const mockGroup = {
       name: 'الدوري المصري الممتاز (الموسم الحالي 2025-2026)',
@@ -539,11 +630,11 @@ export const getStandings = async (leagueId = 'eng.1', { strict = false } = {}) 
 
   try {
     const url = `https://site.api.espn.com/apis/v2/sports/soccer/${leagueId}/standings`;
-    const data = await cachedJson(url, { ttl: 60000 });
+    const data = await cachedJson(url, { ttl: 60000, forceRefresh });
 
     const season = parseSeasonMetadata(data.season);
     const children = data.children || [];
-    
+
     let result = [];
     if (children.length === 1) {
       const entries = children[0]?.standings?.entries || [];
@@ -560,6 +651,8 @@ export const getStandings = async (leagueId = 'eng.1', { strict = false } = {}) 
       }));
     }
 
+    result = result.filter(group => Array.isArray(group.entries) && group.entries.length > 0);
+
     if (season) {
       result.season = season;
     }
@@ -572,48 +665,254 @@ export const getStandings = async (leagueId = 'eng.1', { strict = false } = {}) 
   }
 };
 
-// جلب الأخبار الرياضية الحقيقية
-export const getNews = async ({ strict = false } = {}) => {
-  try {
-    const json = await cachedJson('https://api.rss2json.com/v1/api.json?rss_url=https://rss.dw.com/xml/rss-ar-sports', { ttl: 300000 });
-    
-    if (json.status === 'error') throw new Error("News feed unavailable");
-    const items = json.items || [];
-    return items.map((item, idx) => {
-      const pubDate = new Date(item.pubDate);
-      const diffMs = new Date() - pubDate;
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      
-      let relativeTime = 'منذ ساعات';
-      if (diffHours === 0) {
-        relativeTime = 'منذ أقل من ساعة';
-      } else if (diffHours === 1) {
-        relativeTime = 'منذ ساعة واحدة';
-      } else if (diffHours < 24) {
-        relativeTime = `منذ ${diffHours} ساعة`;
-      } else {
-        const diffDays = Math.floor(diffHours / 24);
-        relativeTime = `منذ ${diffDays} يوم`;
-      }
+export const createStandingsController = ({
+  fetcher = getStandings,
+  onStateChange
+} = {}) => {
+  let activeLeagueId = null;
+  let standings = [];
+  let loading = false;
+  let error = null;
+  let isStale = false;
+  let mounted = true;
+  let requestId = 0;
 
-      const embeddedImage = (item.content || item.description || '').match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
-      const candidates = [item.thumbnail, item.enclosure?.type?.startsWith('image/') ? item.enclosure.link : null, embeddedImage];
-      const imageUrl = candidates.find(value => typeof value === 'string' && /^https?:\/\//i.test(value)) || '';
-
-      return {
-        id: item.guid || String(idx),
-        tag: item.categories?.[0] || 'كرة قدم عالمية',
-        title: item.title,
-        desc: item.description ? item.description.replace(/<[^>]*>/g, '') : '',
-        body: item.content ? item.content.replace(/<[^>]*>/g, '') : item.description || '',
-        img: imageUrl,
-        date: relativeTime,
-        readTime: '3 دقائق قراءة',
-        link: item.link
-      };
+  const emit = () => {
+    if (!mounted) return;
+    onStateChange?.({
+      leagueId: activeLeagueId,
+      standings,
+      loading,
+      error,
+      isStale
     });
+  };
+
+  const load = async (leagueId, { isRetry = false } = {}) => {
+    if (!mounted || !leagueId) return;
+    if (isRetry && loading) return;
+
+    if (activeLeagueId !== leagueId) {
+      activeLeagueId = leagueId;
+      standings = [];
+      isStale = false;
+    }
+
+    const currentRequestId = ++requestId;
+    loading = true;
+    error = null;
+    emit();
+
+    try {
+      const data = await fetcher(leagueId, {
+        strict: true,
+        forceRefresh: isRetry
+      });
+      if (!mounted || currentRequestId !== requestId) return;
+      standings = Array.isArray(data) ? data : [];
+      error = null;
+      isStale = false;
+    } catch (err) {
+      if (!mounted || currentRequestId !== requestId) return;
+      console.error('Error fetching league data:', err);
+      error = 'تعذر جلب بيانات البطولة، يرجى المحاولة مرة أخرى.';
+      isStale = standings.length > 0;
+    } finally {
+      if (mounted && currentRequestId === requestId) {
+        loading = false;
+        emit();
+      }
+    }
+  };
+
+  const retry = () => {
+    if (!mounted || loading || !activeLeagueId) return Promise.resolve();
+    return load(activeLeagueId, { isRetry: true });
+  };
+
+  const dispose = () => {
+    mounted = false;
+  };
+
+  return {
+    load,
+    retry,
+    dispose,
+    getState: () => ({
+      leagueId: activeLeagueId,
+      standings,
+      loading,
+      error,
+      isStale
+    })
+  };
+};
+
+const TRUSTED_DW_ARTICLE_HOSTS = new Set(['dw.com', 'www.dw.com', 'm.dw.com']);
+
+const decodeHtmlEntities = (value = '') => String(value)
+  .replace(/&amp;/gi, '&')
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;/gi, "'")
+  .replace(/&lt;/gi, '<')
+  .replace(/&gt;/gi, '>');
+
+export const isTrustedDwArticleUrl = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === 'https:' && TRUSTED_DW_ARTICLE_HOSTS.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+};
+
+export const isTrustedDwImageUrl = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const parsed = new URL(value.trim());
+    const host = parsed.hostname.toLowerCase();
+    return parsed.protocol === 'https:' && (host === 'dw.com' || host.endsWith('.dw.com'));
+  } catch {
+    return false;
+  }
+};
+
+export const extractArticleMetaImage = (html) => {
+  if (typeof html !== 'string' || !html) return '';
+  const metaTags = html.match(/<meta\b[^>]*>/gi) || [];
+  let twitterFallback = '';
+
+  for (const tag of metaTags) {
+    const attrs = {};
+    const attrPattern = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+    let match;
+    while ((match = attrPattern.exec(tag)) !== null) {
+      const attrName = match[1].toLowerCase();
+      const attrValue = match[2] ?? match[3] ?? match[4] ?? '';
+      attrs[attrName] = attrValue;
+    }
+
+    const key = (attrs.property || attrs.name || '').trim().toLowerCase();
+    if (!key || !attrs.content) continue;
+
+    const candidate = decodeHtmlEntities(attrs.content).trim();
+    if (!isTrustedDwImageUrl(candidate)) continue;
+
+    if (key === 'og:image' || key === 'og:image:secure_url') {
+      return candidate;
+    }
+    if (!twitterFallback && (key === 'twitter:image' || key === 'twitter:image:src')) {
+      twitterFallback = candidate;
+    }
+  }
+
+  return twitterFallback;
+};
+
+export const createArticleImageResolver = ({
+  fetcher = (...args) => fetch(...args),
+  timeout = 6000,
+  maxCacheEntries = 100
+} = {}) => {
+  const cache = new Map();
+  const pending = new Map();
+
+  const remember = (url, imageUrl) => {
+    if (!cache.has(url) && cache.size >= maxCacheEntries) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey !== undefined) cache.delete(oldestKey);
+    }
+    cache.set(url, imageUrl);
+  };
+
+  const resolve = (articleUrl, { signal } = {}) => {
+    if (!isTrustedDwArticleUrl(articleUrl)) return Promise.resolve('');
+    const normalizedUrl = articleUrl.trim();
+    if (cache.has(normalizedUrl)) return Promise.resolve(cache.get(normalizedUrl));
+    if (pending.has(normalizedUrl)) return pending.get(normalizedUrl);
+    if (signal?.aborted) return Promise.resolve('');
+
+    const request = (async () => {
+      const controller = new AbortController();
+      const onExternalAbort = () => controller.abort();
+      if (signal) signal.addEventListener('abort', onExternalAbort, { once: true });
+      const timer = setTimeout(() => controller.abort(), timeout);
+
+      try {
+        const response = await fetcher(normalizedUrl, { signal: controller.signal });
+        if (!response?.ok) {
+          remember(normalizedUrl, '');
+          return '';
+        }
+        const html = await response.text();
+        const imageUrl = extractArticleMetaImage(html);
+        remember(normalizedUrl, imageUrl);
+        return imageUrl;
+      } catch {
+        if (!signal?.aborted) {
+          remember(normalizedUrl, '');
+        }
+        return '';
+      } finally {
+        clearTimeout(timer);
+        if (signal) signal.removeEventListener('abort', onExternalAbort);
+        pending.delete(normalizedUrl);
+      }
+    })();
+
+    pending.set(normalizedUrl, request);
+    return request;
+  };
+
+  return {
+    resolve,
+    clearCache: () => cache.clear(),
+    getCacheSize: () => cache.size
+  };
+};
+
+const defaultArticleImageResolver = createArticleImageResolver();
+
+export const enrichNewsImages = async (
+  articles,
+  { resolver = defaultArticleImageResolver, concurrency = 3, onImageResolved, signal } = {}
+) => {
+  if (!Array.isArray(articles) || articles.length === 0) return [];
+  const queue = articles.filter(item => item && !item.img && isTrustedDwArticleUrl(item.link));
+  if (queue.length === 0) return articles;
+
+  const resolvedById = new Map();
+  let cursor = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), queue.length);
+
+  const worker = async () => {
+    while (cursor < queue.length && !signal?.aborted) {
+      const article = queue[cursor++];
+      const imageUrl = await resolver.resolve(article.link, { signal });
+      if (!signal?.aborted && imageUrl) {
+        resolvedById.set(article.id, imageUrl);
+        onImageResolved?.(article.id, imageUrl);
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  if (resolvedById.size === 0) return articles;
+
+  return articles.map(item => (
+    resolvedById.has(item.id) ? { ...item, img: resolvedById.get(item.id) } : item
+  ));
+};
+
+// جلب الأخبار الرياضية الحقيقية من المصادر المعتمدة (CNN العربية و DW العربية)
+export const getNews = async ({ strict = false, forceRefresh = false, signal } = {}) => {
+  try {
+    return await defaultNewsFetcher.fetchNews({ strict: true, forceRefresh, signal });
   } catch (e) {
-    console.error("Failed to load real news:", e);
+    if (e?.name !== 'AbortError') {
+      console.error("Failed to load real news:", e);
+    }
     if (strict) throw e;
     return [];
   }
@@ -669,7 +968,7 @@ export const getTournamentKnockouts = async (leagueId, seasonYear) => {
       } catch { /* The match remains visible when period details are unavailable. */ }
     }));
   }
-  for (const matches of Object.values(result)) matches.sort((a,b) => new Date(a.date) - new Date(b.date));
+  for (const matches of Object.values(result)) matches.sort((a, b) => new Date(a.date) - new Date(b.date));
   return result;
 };
 

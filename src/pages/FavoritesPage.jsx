@@ -1,4 +1,4 @@
-import { finishedMatchLabel } from '../services/matchResult';
+import { getFavoriteMatchDisplay } from '../services/matchResult';
 import RequestState from '../components/RequestState';
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
@@ -406,18 +406,8 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick, matchesLoadin
               ) : (
                 <div className="favorites-matches-list">
                   {favoriteMatches.map((match) => {
-                    const isEgyMatch = match.leagueId === 'egypt.1';
-
-                    let statusLabel = 'لم تبدأ';
-                    if (isEgyMatch) {
-                      if (match.status === 'LIVE') statusLabel = 'جارية (تجريبية)';
-                      else if (['FT', 'FINISHED'].includes(match.status)) statusLabel = finishedMatchLabel(match) + ' (تجريبية)';
-                      else statusLabel = match.time || 'مجدولة (تجريبية)';
-                    } else {
-                      if (match.status === 'LIVE') statusLabel = `مباشر • ${match.minute || ''}`;
-                      else if (['FT', 'FINISHED'].includes(match.status)) statusLabel = finishedMatchLabel(match);
-                      else statusLabel = match.time || 'قادمة';
-                    }
+                    const { isEgyMatch, isUpcoming, isLive, statusLabel, centerText } =
+                      getFavoriteMatchDisplay(match);
 
                     return (
                       <div
@@ -440,10 +430,10 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick, matchesLoadin
                           {isEgyMatch && <EgyptianBadge />}
                           <span
                             className={`favorite-match-status ${
-                              match.status === 'LIVE' && !isEgyMatch ? 'is-live' : ''
+                              isLive && !isEgyMatch ? 'is-live' : ''
                             }`}
                           >
-                            {match.status === 'UPCOMING' && <Clock size={12} />}
+                            {isUpcoming && <Clock size={12} />}
                             <span>{statusLabel}</span>
                           </span>
                         </div>
@@ -464,12 +454,10 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick, matchesLoadin
 
                           {/* النتيجة أو التوقيت */}
                           <div className="fav-match-score-box">
-                            {match.status === 'UPCOMING' ? (
-                              <span className="fav-match-vs">VS</span>
+                            {isUpcoming ? (
+                              <span className="fav-match-vs">{centerText}</span>
                             ) : (
-                              <span className="fav-match-score">
-                                {match.homeScore} - {match.awayScore}
-                              </span>
+                              <span className="fav-match-score">{centerText}</span>
                             )}
                           </div>
 

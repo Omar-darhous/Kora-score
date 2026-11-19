@@ -1,37 +1,47 @@
 import NewsImage from './NewsImage';
 import RequestState from './RequestState';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Newspaper, Clock, X, ExternalLink, Globe } from 'lucide-react';
-import { getNews } from '../services/footballService';
+import { getNews, enrichNewsImages } from '../services/footballService';
+import {
+  createNewsRefreshController,
+  getArticleSourceName,
+  getExternalArticleLabel
+} from '../services/newsService';
 import { NewsCardSkeleton } from './Skeleton';
 
 const NewsSection = () => {
-  const [news, setNews] = useState([]);
-  const [activeArticle, setActiveArticle] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const [error, setError] = useState(null);
+  const [viewState, setViewState] = useState({
+    news: [],
+    activeArticle: null,
+    loading: true,
+    error: null
+  });
   const [retryCount, setRetryCount] = useState(0);
+  const controllerRef = useRef(null);
 
   useEffect(() => {
-    let active = true;
-    const fetchNews = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await getNews({ strict: true });
-        if (active) setNews(data);
-      } catch (e) {
-        console.error('Failed to load news:', e);
-        if (active) setError('تعذر الوصول إلى الأخبار. تحقق من اتصالك وأعد المحاولة.');
-      } finally {
-        if (active) setLoading(false);
+    const controller = createNewsRefreshController({
+      fetchNews: getNews,
+      enrichImages: enrichNewsImages,
+      onStateChange: (nextState) => setViewState(nextState)
+    });
+    controllerRef.current = controller;
+    controller.start({ forceRefresh: retryCount > 0 });
+
+    return () => {
+      controller.dispose();
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
       }
     };
-    fetchNews();
-    return () => { active = false; };
   }, [retryCount]);
+
+  const { news, activeArticle, loading, error } = viewState;
+  const setActiveArticle = (article) => {
+    controllerRef.current?.setActiveArticle(article);
+  };
 
   return (
     <div className="news-container">
@@ -65,46 +75,55 @@ const NewsSection = () => {
         </div>
       ) : (
         <div className="news-grid">
-          {news.map((item) => (
-            <motion.article
-              key={item.id}
-              className="news-card"
-              onClick={() => setActiveArticle(item)}
-              whileHover={{ y: -4 }}
-              transition={{ duration: 0.18 }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveArticle(item); }}
-              aria-label={item.title}
-            >
-              <div className="news-img-container">
-                <NewsImage src={item.img} alt={item.title} className="news-img" loading="lazy" />
-                <span className="news-tag">{item.tag}</span>
-              </div>
-              
-              <div className="news-info">
-                <div className="news-meta">
-                  <span className="d-flex align-center gap-1">
-                    <Clock size={12} />
-                    <span>{item.date}</span>
-                  </span>
-                  <span>•</span>
-                  <span>{item.readTime}</span>
+          {news.map((item) => {
+            const sourceName = getArticleSourceName(item);
+            return (
+              <motion.article
+                key={item.id}
+                className="news-card"
+                onClick={() => setActiveArticle(item)}
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.18 }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setActiveArticle(item);
+                  }
+                }}
+                aria-label={sourceName ? `${item.title} — ${sourceName}` : item.title}
+              >
+                <div className="news-img-container">
+                  <NewsImage src={item.img} alt={item.title} className="news-img" loading="lazy" />
+                  <span className="news-tag">{item.tag}</span>
                 </div>
-                
-                <h3 className="news-title">{item.title}</h3>
-                <p className="news-desc">{item.desc}</p>
-              </div>
-            </motion.article>
-          ))}
+
+                <div className="news-info">
+                  <div className="news-meta">
+                    {sourceName && <span className="news-source-badge">{sourceName}</span>}
+                    <span className="d-flex align-center gap-1">
+                      <Clock size={12} />
+                      <span>{item.date}</span>
+                    </span>
+                    <span>•</span>
+                    <span>{item.readTime}</span>
+                  </div>
+
+                  <h3 className="news-title">{item.title}</h3>
+                  <p className="news-desc">{item.desc}</p>
+                </div>
+              </motion.article>
+            );
+          })}
         </div>
       )}
 
       {/* Modal: Full Article Reading Experience */}
       <AnimatePresence>
         {activeArticle && (
-          <div 
-            className="modal-overlay" 
+          <div
+            className="modal-overlay"
             onClick={() => setActiveArticle(null)}
             role="dialog"
             aria-modal="true"
@@ -124,9 +143,9 @@ const NewsSection = () => {
                   <Newspaper size={18} color="var(--primary)" />
                   <span>تفاصيل الخبر الرياضي</span>
                 </span>
-                <button 
+                <button
                   type="button"
-                  className="close-modal-btn" 
+                  className="close-modal-btn"
                   onClick={() => setActiveArticle(null)}
                   aria-label="إغلاق"
                 >
@@ -141,9 +160,12 @@ const NewsSection = () => {
                     {activeArticle.tag}
                   </span>
                 </div>
-                
+
                 <div style={{ padding: '22px' }}>
                   <div className="news-meta" style={{ marginBottom: 12 }}>
+                    {getArticleSourceName(activeArticle) && (
+                      <span className="news-source-badge">{getArticleSourceName(activeArticle)}</span>
+                    )}
                     <span className="d-flex align-center gap-1">
                       <Clock size={13} />
                       <span>{activeArticle.date}</span>
@@ -151,11 +173,11 @@ const NewsSection = () => {
                     <span>•</span>
                     <span>{activeArticle.readTime}</span>
                   </div>
-                  
+
                   <h2 style={{ fontSize: '1.3rem', fontWeight: 900, color: 'var(--text-primary)', marginBottom: 14, lineHeight: 1.45 }}>
                     {activeArticle.title}
                   </h2>
-                  
+
                   <p style={{ fontSize: '0.98rem', color: 'var(--text-secondary)', lineHeight: 1.85, whiteSpace: 'pre-line', marginBottom: 22 }}>
                     {activeArticle.body}
                   </p>
@@ -169,7 +191,7 @@ const NewsSection = () => {
                       style={{ textDecoration: 'none', textAlign: 'center' }}
                     >
                       <ExternalLink size={16} />
-                      <span>قراءة التقرير من المصدر الرسمي (DW)</span>
+                      <span>{getExternalArticleLabel(activeArticle)}</span>
                     </a>
                   )}
                 </div>
