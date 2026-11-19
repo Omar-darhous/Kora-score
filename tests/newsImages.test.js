@@ -7,6 +7,7 @@ import {
   createArticleImageResolver,
   enrichNewsImages
 } from '../src/services/footballService.js';
+import * as dwImageResolver from '../src/services/dwImageResolver.js';
 
 const createDeferred = () => {
   let resolve;
@@ -180,4 +181,60 @@ test('enrichNewsImages preserves existing RSS images, respects concurrency, and 
   assert.equal(enriched[1].img, 'https://static.dw.com/image/2_6.jpg');
   assert.equal(enriched[4].img, 'https://static.dw.com/image/5_6.jpg');
   assert.equal(enriched[5].img, '');
+});
+
+test('createArticleImageResolver aborts cleanly without poisoning cache and skips CNN articles', async () => {
+  let fetchCalls = 0;
+  let abortedInFetch = false;
+  const resolver = createArticleImageResolver({
+    fetcher: (url, { signal }) => {
+      fetchCalls += 1;
+      if (fetchCalls === 1) {
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            abortedInFetch = true;
+            const err = new Error('Aborted');
+            err.name = 'AbortError';
+            reject(err);
+          }, { once: true });
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        text: async () => `<meta property="og:image" content="https://static.dw.com/image/recovered_6.jpg" />`
+      });
+    }
+  });
+
+  const controller = new AbortController();
+  const dwUrl = 'https://www.dw.com/ar/abort-recovery/a-900';
+  const pending = resolver.resolve(dwUrl, { signal: controller.signal });
+  controller.abort();
+
+  assert.equal(await pending, '');
+  assert.equal(abortedInFetch, true);
+  assert.equal(resolver.getCacheSize(), 0);
+
+  // Subsequent non-aborted call succeeds because abort did not poison cache
+  assert.equal(await resolver.resolve(dwUrl), 'https://static.dw.com/image/recovered_6.jpg');
+  assert.equal(fetchCalls, 2);
+
+  // CNN articles (with or without RSS image) are preserved and never fetched by DW resolver
+  const cnnArticles = [
+    { id: 'cnn-1', link: 'https://arabic.cnn.com/sport/article/1', img: 'https://cnn-arabic-images.cnn.io/1.jpg' },
+    { id: 'cnn-2', link: 'https://arabic.cnn.com/sport/article/2', img: '' }
+  ];
+  const enrichedCnn = await enrichNewsImages(cnnArticles, { resolver });
+  assert.equal(fetchCalls, 2);
+  assert.equal(enrichedCnn[0].img, 'https://cnn-arabic-images.cnn.io/1.jpg');
+  assert.equal(enrichedCnn[1].img, '');
+});
+
+test('footballService re-exports exact DW image resolver functions with single shared default instance', () => {
+  assert.equal(isTrustedDwArticleUrl, dwImageResolver.isTrustedDwArticleUrl);
+  assert.equal(isTrustedDwImageUrl, dwImageResolver.isTrustedDwImageUrl);
+  assert.equal(extractArticleMetaImage, dwImageResolver.extractArticleMetaImage);
+  assert.equal(createArticleImageResolver, dwImageResolver.createArticleImageResolver);
+  assert.equal(enrichNewsImages, dwImageResolver.enrichNewsImages);
+  assert.equal(typeof dwImageResolver.defaultArticleImageResolver.resolve, 'function');
 });
