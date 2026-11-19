@@ -149,3 +149,78 @@ test('footballService re-exports team service functions with exact backward comp
   assert.equal(footballService.getTeamSchedule, getTeamSchedule);
   assert.equal(footballService.getTeamRoster, getTeamRoster);
 });
+
+test('categorizePosition and translatePosition accurately classify defensive/attacking midfield, wingers, defenders, abbreviations, and unknown roles', async () => {
+  // Defensive Midfield MUST be Midfielder (never Defender despite containing "defen")
+  for (const pos of ['Defensive Midfielder', 'Defensive Midfield', 'CDM', 'DM']) {
+    assert.equal(categorizePosition(pos), 'midfielders', `expected midfielder for ${pos}`);
+    assert.equal(translatePosition(pos), 'وسط دفاعي', `expected وسط دفاعي for ${pos}`);
+  }
+
+  // Attacking & Central Midfield
+  for (const pos of ['Attacking Midfielder', 'Attacking Midfield', 'CAM', 'AM']) {
+    assert.equal(categorizePosition(pos), 'midfielders');
+    assert.equal(translatePosition(pos), 'وسط هجومي');
+  }
+  assert.equal(categorizePosition('Central Midfielder'), 'midfielders');
+  assert.equal(translatePosition('Central Midfielder'), 'وسط مركزي');
+  assert.equal(categorizePosition('CM'), 'midfielders');
+  assert.equal(translatePosition('CM'), 'وسط مركزي');
+
+  // Wingers -> Forwards
+  for (const pos of ['Left Wing', 'Left Winger', 'LW']) {
+    assert.equal(categorizePosition(pos), 'forwards', `expected forward for ${pos}`);
+    assert.equal(translatePosition(pos), 'جناح أيسر');
+  }
+  for (const pos of ['Right Wing', 'Right Winger', 'RW']) {
+    assert.equal(categorizePosition(pos), 'forwards', `expected forward for ${pos}`);
+    assert.equal(translatePosition(pos), 'جناح أيمن');
+  }
+
+  // Centre Back, Fullbacks & Wing-Backs -> Defenders
+  for (const pos of ['Centre Back', 'Center Back', 'Center-Back', 'Centre-Back', 'CB', 'Central Defender']) {
+    assert.equal(categorizePosition(pos), 'defenders');
+    assert.equal(translatePosition(pos), 'قلب دفاع');
+  }
+  for (const pos of ['Left Back', 'Left-Back', 'LB', 'Left Wing-Back', 'LWB']) {
+    assert.equal(categorizePosition(pos), 'defenders');
+    assert.equal(translatePosition(pos), 'ظهير أيسر');
+  }
+  for (const pos of ['Right Back', 'Right-Back', 'RB', 'Right Wing-Back', 'RWB']) {
+    assert.equal(categorizePosition(pos), 'defenders');
+    assert.equal(translatePosition(pos), 'ظهير أيمن');
+  }
+
+  // Goalkeepers & Strikers / Center Forwards
+  for (const pos of ['Goalkeeper', 'GK', 'G']) {
+    assert.equal(categorizePosition(pos), 'goalkeepers');
+    assert.equal(translatePosition(pos), 'حارس مرمى');
+  }
+  for (const pos of ['Center Forward', 'Centre Forward', 'CF']) {
+    assert.equal(categorizePosition(pos), 'forwards');
+    assert.equal(translatePosition(pos), 'مهاجم صريح');
+  }
+  assert.equal(categorizePosition('ST'), 'forwards');
+  assert.equal(translatePosition('ST'), 'رأس حربة');
+
+  // ESPN single-letter abbreviations & position objects
+  assert.equal(categorizePosition('D'), 'defenders');
+  assert.equal(categorizePosition('M'), 'midfielders');
+  assert.equal(categorizePosition('F'), 'forwards');
+  assert.equal(categorizePosition({ abbreviation: 'CDM' }), 'midfielders');
+  assert.equal(translatePosition({ abbreviation: 'CDM' }), 'وسط دفاعي');
+
+  // Missing / Unknown / Ambiguous -> other without guessing
+  assert.equal(categorizePosition(''), 'other');
+  assert.equal(categorizePosition(null), 'other');
+  assert.equal(categorizePosition('Utility Player'), 'other');
+  assert.equal(translatePosition(''), 'لاعب');
+  assert.equal(translatePosition('Utility Player'), 'Utility Player');
+
+  // Egyptian mock players preserve their existing position groups
+  const ahlyRoster = await getTeamRoster('egypt.1', 'egy-team-ahly');
+  assert.equal(ahlyRoster.filter((p) => p.positionGroup === 'goalkeepers').length, 1);
+  assert.equal(ahlyRoster.filter((p) => p.positionGroup === 'defenders').length, 4);
+  assert.equal(ahlyRoster.filter((p) => p.positionGroup === 'midfielders').length, 3);
+  assert.equal(ahlyRoster.filter((p) => p.positionGroup === 'forwards').length, 3);
+});

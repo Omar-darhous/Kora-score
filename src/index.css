@@ -3074,30 +3074,51 @@ select option {
 }
 
 .team-result-badge {
-  font-size: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
   font-weight: 800;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: var(--radius-full);
   margin-top: 4px;
-  font-family: var(--font-mono);
+  line-height: 1.4;
 }
 
 .team-result-badge.win {
-  background: var(--live-light);
-  color: var(--live);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.16);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.38);
 }
 
 .team-result-badge.draw {
-  background: rgba(234, 179, 8, 0.12);
-  color: #eab308;
-  border: 1px solid rgba(234, 179, 8, 0.3);
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.38);
 }
 
 .team-result-badge.loss {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--danger);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.16);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.38);
+}
+
+[data-theme="light"] .team-result-badge.win {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+[data-theme="light"] .team-result-badge.draw {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.38);
+}
+
+[data-theme="light"] .team-result-badge.loss {
+  background: rgba(239, 68, 68, 0.14);
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.35);
 }
 
 /* Roster / Squad */
@@ -3163,12 +3184,16 @@ select option {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: top center;
 }
 
 .player-avatar-fallback {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: 0.86rem;
+  letter-spacing: 0.02em;
+  line-height: 1;
   color: var(--primary);
+  user-select: none;
 }
 
 .player-card-info {

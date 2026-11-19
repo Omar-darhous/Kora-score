@@ -43,6 +43,135 @@ export function finishedMatchLabel(match) {
 export function isUpcomingMatch(match) {
   return ['NS', 'UPCOMING'].includes(match?.status);
 }
+
+const normalizeTeamId = (value) => {
+  if (value === null || value === undefined) return '';
+  const clean = String(value).trim();
+  if (!clean || clean === 'null' || clean === 'undefined') return '';
+  return clean;
+};
+
+const NON_COMPLETED_STATUS_RE = /postpon|cancel|abandon|suspend|delay|schedul/i;
+const NON_COMPLETED_CODES = new Set([
+  'NS',
+  'UPCOMING',
+  'LIVE',
+  'IN_PROGRESS',
+  'HT',
+  'PST',
+  'POSTPONED',
+  'CANC',
+  'CANCELLED',
+  'CANCELED',
+  'ABD',
+  'ABANDONED',
+  'SUSP',
+  'SUSPENDED',
+  'TBD',
+  'DELAYED'
+]);
+const COMPLETED_CODES = new Set(['FT', 'FINISHED', 'AET', 'PEN']);
+
+const resolveMatchTeamIds = (match = {}) => {
+  let homeId = normalizeTeamId(match.homeTeamId);
+  let awayId = normalizeTeamId(match.awayTeamId);
+
+  if (!homeId || !awayId) {
+    const competitors = match.rawEvent?.competitions?.[0]?.competitors || [];
+    const homeComp = competitors.find((c) => c.homeAway === 'home');
+    const awayComp = competitors.find((c) => c.homeAway === 'away');
+    if (!homeId) homeId = normalizeTeamId(homeComp?.team?.id ?? homeComp?.id);
+    if (!awayId) awayId = normalizeTeamId(awayComp?.team?.id ?? awayComp?.id);
+  }
+
+  return { homeId, awayId };
+};
+
+const isCompletedMatch = (match = {}) => {
+  const statusCode = String(match.status || '').toUpperCase().trim();
+  if (NON_COMPLETED_CODES.has(statusCode)) return false;
+
+  const rawType = match.rawEvent?.status?.type || match.rawEvent?.competitions?.[0]?.status?.type || {};
+  const rawText = [
+    match.statusDetail,
+    rawType.name,
+    rawType.description,
+    rawType.detail,
+    rawType.shortDetail
+  ].filter(Boolean).join(' ');
+
+  if (NON_COMPLETED_STATUS_RE.test(rawText)) return false;
+  if (rawType.state === 'pre' || rawType.state === 'in') return false;
+  if (rawType.completed === false) return false;
+
+  if (COMPLETED_CODES.has(statusCode)) return true;
+  if (rawType.completed === true || rawType.state === 'post') return true;
+  return false;
+};
+
+/**
+ * Calculates a completed match's outcome strictly from the perspective of viewedTeamId.
+ * Returns 'win' | 'loss' | 'draw' | null (for unfinished, postponed, cancelled, or ambiguous matches).
+ */
+export function getTeamMatchOutcome(match, viewedTeamId) {
+  const cleanViewedId = normalizeTeamId(viewedTeamId);
+  if (!match || !cleanViewedId) return null;
+
+  const { homeId, awayId } = resolveMatchTeamIds(match);
+  if (!homeId || !awayId || homeId === awayId) return null;
+
+  let side = null;
+  if (cleanViewedId === homeId) side = 'home';
+  else if (cleanViewedId === awayId) side = 'away';
+  else return null;
+
+  if (!isCompletedMatch(match)) return null;
+
+  const statusCode = String(match.status || '').toUpperCase().trim();
+  const isPenalties = match.finishType === 'penalties' || statusCode === 'PEN';
+
+  if (isPenalties) {
+    const homePen = numberOrNull(match.homePenalties);
+    const awayPen = numberOrNull(match.awayPenalties);
+
+    if (homePen !== null && awayPen !== null && homePen !== awayPen) {
+      const viewedPen = side === 'home' ? homePen : awayPen;
+      const oppPen = side === 'home' ? awayPen : homePen;
+      return viewedPen > oppPen ? 'win' : 'loss';
+    }
+
+    const homeWon = match.homeWinner === true && match.awayWinner !== true;
+    const awayWon = match.awayWinner === true && match.homeWinner !== true;
+    if (homeWon) return side === 'home' ? 'win' : 'loss';
+    if (awayWon) return side === 'away' ? 'win' : 'loss';
+
+    // Never classify a penalty-decided match as a draw or invent an ambiguous winner
+    return null;
+  }
+
+  let homeScore = numberOrNull(match.homeScore);
+  let awayScore = numberOrNull(match.awayScore);
+
+  // For extra-time matches, prefer explicit extraTimeScore if main scores are absent
+  if ((match.finishType === 'extra-time' || statusCode === 'AET') && Array.isArray(match.extraTimeScore) && match.extraTimeScore.length === 2) {
+    const etHome = numberOrNull(match.extraTimeScore[0]);
+    const etAway = numberOrNull(match.extraTimeScore[1]);
+    if (etHome !== null && etAway !== null) {
+      homeScore = etHome;
+      awayScore = etAway;
+    }
+  }
+
+  if (homeScore === null || awayScore === null) return null;
+
+  const viewedScore = side === 'home' ? homeScore : awayScore;
+  const opponentScore = side === 'home' ? awayScore : homeScore;
+
+  if (viewedScore > opponentScore) return 'win';
+  if (viewedScore < opponentScore) return 'loss';
+  return 'draw';
+}
+
 export function getFavoriteMatchDisplay(match = {}) {
   const isEgyMatch = match.leagueId === 'egypt.1';
   const isUpcoming = isUpcomingMatch(match);

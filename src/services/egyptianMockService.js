@@ -288,6 +288,8 @@ export const getEgyptianTeamSchedule = (teamId) => {
       date: '2026-05-29T19:30:00Z',
       time: m.time,
       name: `${m.homeTeam} ضد ${m.awayTeam}`,
+      homeTeamId: m.homeTeamId,
+      awayTeamId: m.awayTeamId,
       homeTeam: m.homeTeam,
       awayTeam: m.awayTeam,
       homeScore: m.homeScore,

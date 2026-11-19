@@ -1,4 +1,4 @@
-import { finishedMatchLabel } from '../services/matchResult';
+import { finishedMatchLabel, getTeamMatchOutcome } from '../services/matchResult';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -27,6 +27,7 @@ import {
 } from '../services/footballService';
 import FavoriteButton from '../components/FavoriteButton';
 import { EgyptianDisclaimer, EgyptianBadge } from '../components/EgyptianDisclaimer';
+import PlayerAvatar from '../components/PlayerAvatar';
 
 const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
   const { teamId } = useParams();
@@ -944,25 +945,40 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                         </span>
                       </div>
 
-                      {/* النتيجة وشارة الفوز/الخسارة/التعادل */}
-                      <div className="match-score-center">
-                        <div className="score-display-pill">
-                          <span className="score-num">{item.homeScore}</span>
-                          <span className="score-sep">-</span>
-                          <span className="score-num">{item.awayScore}</span>
-                        </div>
+                      {/* النتيجة وشارة الفوز/الهزيمة/التعادل من منظور الفريق المعروض */}
+                      {(() => {
+                        const outcome = getTeamMatchOutcome(item, teamId);
+                        const hasScores = Number.isFinite(item.homeScore) && Number.isFinite(item.awayScore);
+                        const isNotStarted = item.status === 'NS' || item.status === 'UPCOMING';
+                        return (
+                          <div className="match-score-center">
+                            <div className="score-display-pill">
+                              {isNotStarted || !hasScores ? (
+                                <span className="match-time-text">{item.time || 'VS'}</span>
+                              ) : (
+                                <>
+                                  <span className="score-num">{item.homeScore}</span>
+                                  <span className="score-sep">-</span>
+                                  <span className="score-num">{item.awayScore}</span>
+                                </>
+                              )}
+                            </div>
 
-                        {item.status === 'FT' && <span className="match-finish-note">{finishedMatchLabel(item)}</span>}
-                        {item.result === 'W' && (
-                          <span className="team-result-badge win">فوز W</span>
-                        )}
-                        {item.result === 'D' && (
-                          <span className="team-result-badge draw">تعادل D</span>
-                        )}
-                        {item.result === 'L' && (
-                          <span className="team-result-badge loss">خسارة L</span>
-                        )}
-                      </div>
+                            {item.status === 'FT' && <span className="match-finish-note">{finishedMatchLabel(item)}</span>}
+                            {item.status === 'POSTPONED' && <span className="match-finish-note">مؤجلة</span>}
+                            {item.status === 'CANCELLED' && <span className="match-finish-note">ملغاة</span>}
+                            {outcome === 'win' && (
+                              <span className="team-result-badge win" aria-label="نتيجة الفريق: فوز">فوز</span>
+                            )}
+                            {outcome === 'draw' && (
+                              <span className="team-result-badge draw" aria-label="نتيجة الفريق: تعادل">تعادل</span>
+                            )}
+                            {outcome === 'loss' && (
+                              <span className="team-result-badge loss" aria-label="نتيجة الفريق: هزيمة">هزيمة</span>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* الفريق الضيف */}
                       <div className="match-team-away">
@@ -1041,20 +1057,11 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                           <div className="player-card-number">
                             {player.jersey ? `#${player.jersey}` : <Shield size={14} />}
                           </div>
-                          <div className="player-card-avatar">
-                            {player.photo ? (
-                              <img
-                                src={player.photo}
-                                alt={player.name}
-                                className="player-photo"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                            ) : (
-                              <div className="player-avatar-fallback">
-                                {player.name.charAt(0)}
-                              </div>
-                            )}
-                          </div>
+                          <PlayerAvatar
+                            playerId={player.id}
+                            name={player.name}
+                            photo={player.photo}
+                          />
                           <div className="player-card-info">
                             <span className="player-name" title={player.name}>{player.name}</span>
                             <div className="player-sub-info">
@@ -1083,20 +1090,11 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                           <div className="player-card-number">
                             {player.jersey ? `#${player.jersey}` : <Shield size={14} />}
                           </div>
-                          <div className="player-card-avatar">
-                            {player.photo ? (
-                              <img
-                                src={player.photo}
-                                alt={player.name}
-                                className="player-photo"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                            ) : (
-                              <div className="player-avatar-fallback">
-                                {player.name.charAt(0)}
-                              </div>
-                            )}
-                          </div>
+                          <PlayerAvatar
+                            playerId={player.id}
+                            name={player.name}
+                            photo={player.photo}
+                          />
                           <div className="player-card-info">
                             <span className="player-name" title={player.name}>{player.name}</span>
                             <div className="player-sub-info">
@@ -1125,20 +1123,11 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                           <div className="player-card-number">
                             {player.jersey ? `#${player.jersey}` : <Activity size={14} />}
                           </div>
-                          <div className="player-card-avatar">
-                            {player.photo ? (
-                              <img
-                                src={player.photo}
-                                alt={player.name}
-                                className="player-photo"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                            ) : (
-                              <div className="player-avatar-fallback">
-                                {player.name.charAt(0)}
-                              </div>
-                            )}
-                          </div>
+                          <PlayerAvatar
+                            playerId={player.id}
+                            name={player.name}
+                            photo={player.photo}
+                          />
                           <div className="player-card-info">
                             <span className="player-name" title={player.name}>{player.name}</span>
                             <div className="player-sub-info">
@@ -1167,20 +1156,11 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                           <div className="player-card-number">
                             {player.jersey ? `#${player.jersey}` : <Flame size={14} />}
                           </div>
-                          <div className="player-card-avatar">
-                            {player.photo ? (
-                              <img
-                                src={player.photo}
-                                alt={player.name}
-                                className="player-photo"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                            ) : (
-                              <div className="player-avatar-fallback">
-                                {player.name.charAt(0)}
-                              </div>
-                            )}
-                          </div>
+                          <PlayerAvatar
+                            playerId={player.id}
+                            name={player.name}
+                            photo={player.photo}
+                          />
                           <div className="player-card-info">
                             <span className="player-name" title={player.name}>{player.name}</span>
                             <div className="player-sub-info">
@@ -1209,6 +1189,11 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                           <div className="player-card-number">
                             {player.jersey ? `#${player.jersey}` : '#'}
                           </div>
+                          <PlayerAvatar
+                            playerId={player.id}
+                            name={player.name}
+                            photo={player.photo}
+                          />
                           <div className="player-card-info">
                             <span className="player-name" title={player.name}>{player.name}</span>
                             <div className="player-sub-info">
