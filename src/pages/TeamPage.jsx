@@ -1,4 +1,4 @@
-import { finishedMatchLabel, getTeamMatchOutcome } from '../services/matchResult';
+import { finishedMatchLabel, getTeamMatchOutcome, getMatchStatusLabel } from '../services/matchResult';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -965,8 +965,9 @@ const TeamPage = ({ matches = [], leagues = [], onMatchClick }) => {
                             </div>
 
                             {item.status === 'FT' && <span className="match-finish-note">{finishedMatchLabel(item)}</span>}
-                            {item.status === 'POSTPONED' && <span className="match-finish-note">مؤجلة</span>}
-                            {item.status === 'CANCELLED' && <span className="match-finish-note">ملغاة</span>}
+                            {['POSTPONED', 'CANCELLED', 'ABANDONED', 'SUSPENDED'].includes(item.status) && (
+                              <span className="match-finish-note">{getMatchStatusLabel(item)}</span>
+                            )}
                             {outcome === 'win' && (
                               <span className="team-result-badge win" aria-label="نتيجة الفريق: فوز">فوز</span>
                             )}

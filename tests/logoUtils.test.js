@@ -74,9 +74,9 @@ test('footballService re-exports logo utilities and getLeagues with exact backwa
   assert.equal(footballService.getLeagues, getLeagues);
 
   const leagues = footballService.getLeagues();
-  assert.equal(leagues.length, 15);
+  assert.equal(leagues.length, 16);
   assert.deepEqual(
     leagues.map(l => l.id),
-    ['eng.1', 'esp.1', 'ita.1', 'ger.1', 'fra.1', 'ksa.1', 'egypt.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf', 'fifa.world', 'caf.nations', 'uefa.euro', 'conmebol.america', 'usa.1']
+    ['eng.1', 'esp.1', 'ita.1', 'ger.1', 'fra.1', 'ksa.1', 'egypt.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf', 'fifa.world', 'caf.nations', 'uefa.euro', 'conmebol.america', 'afc.asian.cup', 'usa.1']
   );
 });

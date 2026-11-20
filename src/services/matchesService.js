@@ -1,5 +1,5 @@
 import { cachedJson } from './requestCache.js';
-import { parseMatchResult } from './matchResult.js';
+import { parseMatchResult, resolveEspnMatchStatus } from './matchResult.js';
 import { classifyRound, rounds } from './tournamentRules.js';
 import { getMockEgyptianMatchDetails } from './egyptianMockService.js';
 import { resolveLeagueLogo, resolveTeamLogo } from './logoUtils.js';
@@ -57,12 +57,14 @@ export const normalizeScoreboardMatches = (data, league, dateStr) => {
     const homeCompetitor = comp.competitors?.find(c => c.homeAway === 'home') || {};
     const awayCompetitor = comp.competitors?.find(c => c.homeAway === 'away') || {};
 
-    let statusStr = 'NS';
-    if (event.status?.type?.state === 'in') {
-      statusStr = 'LIVE';
-    } else if (event.status?.type?.state === 'post') {
-      statusStr = 'FT';
-    }
+    const eventStatus = event.status || comp.status;
+    const statusStr = resolveEspnMatchStatus(eventStatus);
+    const hasPlayedScore = statusStr === 'FT' || statusStr === 'LIVE';
+    const parsePlayedScore = (raw) => {
+      if (!hasPlayedScore) return null;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) ? n : 0;
+    };
 
     const matchTime = new Date(event.date).toLocaleTimeString('ar-EG', {
       hour: '2-digit',
@@ -91,14 +93,14 @@ export const normalizeScoreboardMatches = (data, league, dateStr) => {
       leagueLogo: resolveLeagueLogo(data.leagues?.[0], league.logo),
       homeTeam: homeCompetitor.team?.displayName || 'فريق مستضيف',
       homeLogo: resolveTeamLogo(homeCompetitor.team),
-      homeScore: parseInt(homeCompetitor.score) || 0,
+      homeScore: parsePlayedScore(homeCompetitor.score),
       homeTeamId: homeCompetitor.team?.id,
       awayTeam: awayCompetitor.team?.displayName || 'فريق ضيف',
       awayLogo: resolveTeamLogo(awayCompetitor.team),
-      awayScore: parseInt(awayCompetitor.score) || 0,
+      awayScore: parsePlayedScore(awayCompetitor.score),
       awayTeamId: awayCompetitor.team?.id,
       status: statusStr,
-      ...parseMatchResult(event.status || comp.status, comp.competitors),
+      ...parseMatchResult(eventStatus, comp.competitors),
       minute: event.status?.displayClock ? event.status.displayClock.replace("'", "") : event.status?.clock || 0,
       time: matchTime,
       roundName,
@@ -207,14 +209,16 @@ export const getMatchDetails = async (leagueId, eventId) => {
     const competition = summary.header?.competitions?.[0];
     const home = competition?.competitors?.find(c => c.homeAway === 'home');
     const away = competition?.competitors?.find(c => c.homeAway === 'away');
+    const detailStatus = competition ? resolveEspnMatchStatus(competition.status) : 'NS';
+    const detailHasScore = detailStatus === 'FT' || detailStatus === 'LIVE';
     const match = competition && home && away ? {
       id: String(eventId), leagueId,
       homeTeam: home.team?.displayName, awayTeam: away.team?.displayName,
       homeLogo: home.team?.logo || home.team?.logos?.[0]?.href,
       awayLogo: away.team?.logo || away.team?.logos?.[0]?.href,
-      homeScore: Number(home.score?.value ?? home.score ?? 0),
-      awayScore: Number(away.score?.value ?? away.score ?? 0),
-      status: competition.status?.type?.state === 'post' ? 'FT' : competition.status?.type?.state === 'in' ? 'LIVE' : 'NS',
+      homeScore: detailHasScore ? Number(home.score?.value ?? home.score ?? 0) : null,
+      awayScore: detailHasScore ? Number(away.score?.value ?? away.score ?? 0) : null,
+      status: detailStatus,
       ...parseMatchResult(competition.status, competition.competitors)
     } : null;
     return {

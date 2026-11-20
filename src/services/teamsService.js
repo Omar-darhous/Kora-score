@@ -1,5 +1,5 @@
 import { cachedJson } from './requestCache.js';
-import { parseMatchResult, getTeamMatchOutcome } from './matchResult.js';
+import { parseMatchResult, getTeamMatchOutcome, resolveEspnMatchStatus } from './matchResult.js';
 import { resolveTeamLogo } from './logoUtils.js';
 import { resolvePlayerPhoto } from '../utils/playerAvatar.js';
 import {
@@ -213,7 +213,12 @@ export const getTeamSchedule = async (leagueId, teamId) => {
       const isHome = homeTeamId === cleanId;
       const opponentComp = isHome ? awayComp : homeComp;
 
+      const eventStatus = event.status || comp.status;
+      const status = resolveEspnMatchStatus(eventStatus);
+      const hasPlayedScore = status === 'FT' || status === 'LIVE';
+
       const parseOptionalScore = (raw) => {
+        if (!hasPlayedScore) return null;
         const val = raw?.value ?? raw?.displayValue ?? raw;
         if (val === null || val === undefined || val === '') return null;
         const parsed = Number(val);
@@ -222,25 +227,6 @@ export const getTeamSchedule = async (leagueId, teamId) => {
 
       const homeScore = parseOptionalScore(homeComp.score);
       const awayScore = parseOptionalScore(awayComp.score);
-
-      const eventStatus = event.status || comp.status;
-      const statusType = eventStatus?.type || {};
-      const statusText = [statusType.name, statusType.description, statusType.detail, statusType.shortDetail]
-        .filter(Boolean)
-        .join(' ');
-
-      let status = 'NS';
-      if (/postpon/i.test(statusText)) {
-        status = 'POSTPONED';
-      } else if (/cancel|abandon|suspend/i.test(statusText)) {
-        status = 'CANCELLED';
-      } else if (statusType.state === 'in') {
-        status = 'LIVE';
-      } else if (statusType.state === 'pre') {
-        status = 'NS';
-      } else if (statusType.state === 'post' || statusType.completed === true) {
-        status = 'FT';
-      }
 
       const parsedResult = parseMatchResult(eventStatus, competitors);
       const baseItem = {

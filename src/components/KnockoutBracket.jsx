@@ -21,6 +21,14 @@ function MatchCard({ match, next, matchIndex = 0, onMatchClick, onHighlight, hig
       : 'انتهت'
     : match.status === 'LIVE'
     ? 'مباشر'
+    : match.status === 'POSTPONED'
+    ? 'مؤجلة'
+    : match.status === 'CANCELLED'
+    ? 'ملغاة'
+    : match.status === 'ABANDONED'
+    ? 'متوقفة'
+    : match.status === 'SUSPENDED'
+    ? 'معلّقة'
     : match.time || 'لم تبدأ';
 
   const headerLabel = final

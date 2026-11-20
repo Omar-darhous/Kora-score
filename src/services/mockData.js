@@ -15,6 +15,7 @@ export const LEAGUES = [
   { id: 'caf.nations', name: 'كأس الأمم الإفريقية', country: 'إفريقيا', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/76.png' },
   { id: 'uefa.euro', name: 'كأس أمم أوروبا', country: 'أوروبا', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/74.png' },
   { id: 'conmebol.america', name: 'كوبا أمريكا', country: 'أمريكا الجنوبية', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/83.png' },
+  { id: 'afc.asian.cup', name: 'كأس آسيا', country: 'آسيا', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/2243.png' },
   { id: 'usa.1', name: 'الدوري الأمريكي (MLS)', country: 'أمريكا', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/19.png' }
 ];
 

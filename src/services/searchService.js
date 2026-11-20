@@ -399,6 +399,7 @@ const LEAGUE_ALIASES = {
   'caf.nations': ['كأس الأمم الإفريقية', 'كأس الامم الافريقية', 'أمم أفريقيا', 'امم افريقيا', 'افريقيا', 'إفريقيا', 'afcon', 'africa cup of nations', 'can'],
   'uefa.euro': ['كأس أمم أوروبا', 'كأس الامم الاوروبية', 'كاس امم اوروبا', 'أمم أوروبا', 'امم اوروبا', 'يورو', 'euro', 'uefa euro', 'european championship'],
   'conmebol.america': ['كوبا أمريكا', 'كوبا امريكا', 'كوبا', 'copa america', 'copa américa', 'conmebol copa america'],
+  'afc.asian.cup': ['كأس آسيا', 'كاس اسيا', 'كأس الأمم الآسيوية', 'كأس الامم الاسيوية', 'asian cup', 'afc asian cup', 'afc'],
   'usa.1': ['الدوري الامريكي', 'ام ال اس', 'mls', 'امريكا']
 };
 

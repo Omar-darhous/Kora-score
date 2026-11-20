@@ -60,6 +60,7 @@ test('league and team logo URLs use verified ESPN leaguelogos/teamlogos paths, e
     'caf.nations': '76',
     'uefa.euro': '74',
     'conmebol.america': '83',
+    'afc.asian.cup': '2243',
     'usa.1': '19'
   };
 
@@ -623,6 +624,178 @@ test('Copa America (conmebol.america) registration, search, 2024 vs 2021 formats
     assert.equal(knockouts2021.thirdPlace.length, 1);
     assert.equal(knockouts2021.final.length, 1);
     assert.equal(knockouts2021.final[0].homeWinner, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('AFC Asian Cup (afc.asian.cup) registration, search, 24-team rules, 2019/2023/2027 editions, 2023 in 2024 knockouts, and no third-place match', async () => {
+  const leagues = getLeagues();
+  const asianCup = leagues.find(l => l.id === 'afc.asian.cup');
+  assert.ok(asianCup, 'afc.asian.cup must be registered in getLeagues()');
+  assert.equal(asianCup.name, 'كأس آسيا');
+  assert.equal(asianCup.logo, 'https://a.espncdn.com/i/leaguelogos/soccer/500/2243.png');
+  assert.equal(isTournament('afc.asian.cup'), true);
+  assert.equal(isNationalTournament('afc.asian.cup'), true);
+  assert.equal(isUefaClubTournament('afc.asian.cup'), false);
+
+  // Arabic & English search aliases
+  for (const query of ['كأس آسيا', 'كاس اسيا', 'كأس الأمم الآسيوية', 'كأس الامم الاسيوية', 'Asian Cup', 'AFC Asian Cup', 'AFC']) {
+    const res = searchAll({ query, leagues, matches: [] });
+    assert.equal(res.leagues.some(l => l.id === 'afc.asian.cup'), true, `search query "${query}" must match afc.asian.cup`);
+  }
+
+  const buildAsianCupGroups = (year, played = 3) =>
+    Array.from({ length: 6 }, (_, g) => ({
+      name: `Group ${String.fromCharCode(65 + g)}`,
+      season: { year },
+      entries: Array.from({ length: 4 }, (_, r) => ({
+        teamId: `ac-${year}-g${g}-r${r + 1}`,
+        rank: r + 1,
+        played
+      }))
+    }));
+
+  // 2023 completed edition (6 groups x 4 teams) with exactly 4 qualified third-placed teams & 2 eliminated
+  const groups2023 = buildAsianCupGroups(2023, 3);
+  const r16Teams = [
+    ...groups2023.flatMap(g => [g.entries[0].teamId, g.entries[1].teamId]),
+    'ac-2023-g0-r3', 'ac-2023-g1-r3', 'ac-2023-g2-r3', 'ac-2023-g3-r3'
+  ];
+  const r16Bracket = {
+    r16: Array.from({ length: 8 }, (_, i) => ({
+      homeTeamId: r16Teams[i * 2],
+      awayTeamId: r16Teams[i * 2 + 1]
+    }))
+  };
+
+  assert.equal(qualification('afc.asian.cup', groups2023[0].entries[0], groups2023, r16Bracket)?.label, 'تأهل إلى دور الـ16');
+  assert.equal(qualification('afc.asian.cup', groups2023[0].entries[1], groups2023, r16Bracket)?.label, 'تأهل إلى دور الـ16');
+  assert.equal(qualification('afc.asian.cup', groups2023[0].entries[3], groups2023, r16Bracket)?.label, 'خرج من دور المجموعات');
+
+  const thirdLabels = groups2023.map(g => qualification('afc.asian.cup', g.entries[2], groups2023, r16Bracket)?.label);
+  assert.equal(thirdLabels.filter(l => l === 'تأهل ضمن أفضل 4 ثوالث').length, 4);
+  assert.equal(thirdLabels.filter(l => l === 'لم يتأهل ضمن أفضل الثوالث').length, 2);
+
+  // Historical 2019 edition (24-team) & older 2015 edition (16-team: 4 groups x 4 -> top 2 to Quarterfinals)
+  const groups2019 = buildAsianCupGroups(2019, 3);
+  assert.equal(qualification('afc.asian.cup', groups2019[0].entries[0], groups2019, null)?.label, 'تأهل إلى دور الـ16');
+  assert.equal(qualification('afc.asian.cup', groups2019[0].entries[2], groups2019, null)?.label, 'ينافس على أفضل 4 ثوالث — التأهل غير مؤكد');
+
+  const groups2015 = Array.from({ length: 4 }, (_, g) => ({
+    name: `Group ${String.fromCharCode(65 + g)}`,
+    season: { year: 2015 },
+    entries: Array.from({ length: 4 }, (_, r) => ({ teamId: `ac15-${g}-${r}`, rank: r + 1, played: 3 }))
+  }));
+  assert.equal(qualification('afc.asian.cup', groups2015[0].entries[0], groups2015, null)?.label, 'تأهل إلى ربع النهائي');
+  assert.equal(qualification('afc.asian.cup', groups2015[0].entries[2], groups2015, null)?.label, 'خرج من دور المجموعات');
+
+  // Upcoming 2027 edition (played === 0): NEVER marks teams as qualified or eliminated!
+  const groups2027 = buildAsianCupGroups(2027, 0);
+  for (const entry of groups2027[0].entries) {
+    assert.equal(qualification('afc.asian.cup', entry, groups2027, null), null);
+  }
+
+  // Cross-year fetching for 2023 edition played in 2024 & stage ordering without third-place match
+  assert.deepEqual(getSeasonCalendarYears('afc.asian.cup', 2023), [2023, 2024]);
+  assert.deepEqual(getSeasonCalendarYears('afc.asian.cup', 2019), [2019, 2020]);
+
+  const asianFixtures = [
+    { id: 'ac-gs', date: '2024-01-12T16:00Z', dateKey: '2024-01-12', dateTs: Date.parse('2024-01-12T16:00Z'), seasonSlug: 'group-stage' },
+    { id: 'ac-r16', date: '2024-01-28T11:30Z', dateKey: '2024-01-28', dateTs: Date.parse('2024-01-28T11:30Z'), seasonSlug: 'round-of-16' },
+    { id: 'ac-qf', date: '2024-02-02T11:30Z', dateKey: '2024-02-02', dateTs: Date.parse('2024-02-02T11:30Z'), seasonSlug: 'quarterfinals' },
+    { id: 'ac-sf', date: '2024-02-06T15:00Z', dateKey: '2024-02-06', dateTs: Date.parse('2024-02-06T15:00Z'), seasonSlug: 'semifinals' },
+    { id: 'ac-fin', date: '2024-02-10T15:00Z', dateKey: '2024-02-10', dateTs: Date.parse('2024-02-10T15:00Z'), seasonSlug: 'final' }
+  ];
+  const organized = organizeHistoricalMatches(asianFixtures, 'afc.asian.cup');
+  assert.equal(organized.mode, 'stages');
+  assert.deepEqual(organized.groups.map(g => g.id), [
+    'stage-group-stage',
+    'stage-r16',
+    'stage-qf',
+    'stage-sf',
+    'stage-final'
+  ]);
+  assert.equal(organized.groups.some(g => g.id === 'stage-third-place'), false);
+
+  // getTournamentKnockouts fetches [2023, 2024] for Asian Cup 2023, preserves PEN/AET, and keeps upcoming 2027 as NS
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    const str = String(url);
+    urls.push(str);
+    if (str.includes('/summary?')) return { ok: true, json: async () => ({}) };
+    if (str.includes('dates=2024')) {
+      return {
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              id: 'ac23-qf-pen',
+              season: { year: 2023, slug: 'quarterfinals' },
+              date: '2024-02-03T15:30Z',
+              status: { type: { state: 'post', completed: true, name: 'STATUS_FINAL_PEN', detail: 'FT-Pens' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '1', shootoutScore: '3', winner: true, team: { id: '4398', displayName: 'Qatar' } },
+                  { homeAway: 'away', score: '1', shootoutScore: '2', winner: false, team: { id: '2918', displayName: 'Uzbekistan' } }
+                ]
+              }]
+            },
+            {
+              id: 'ac23-final',
+              season: { year: 2023, slug: 'final' },
+              date: '2024-02-10T15:00Z',
+              status: { type: { state: 'post', completed: true, name: 'STATUS_FULL_TIME' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '1', winner: false, team: { id: '2915', displayName: 'Jordan' } },
+                  { homeAway: 'away', score: '3', winner: true, team: { id: '4398', displayName: 'Qatar' } }
+                ]
+              }]
+            }
+          ]
+        })
+      };
+    }
+    if (str.includes('dates=2027')) {
+      return {
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              id: 'ac27-r16-future',
+              season: { year: 2027, slug: 'round-of-16' },
+              date: '2027-01-24T15:00Z',
+              status: { type: { state: 'pre', completed: false, name: 'STATUS_SCHEDULED' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '', team: { id: '655', displayName: 'Saudi Arabia' } },
+                  { homeAway: 'away', score: '', team: { id: '627', displayName: 'Japan' } }
+                ]
+              }]
+            }
+          ]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({ events: [] }) };
+  };
+
+  try {
+    const knockouts2023 = await getTournamentKnockouts('afc.asian.cup', 2023);
+    assert.ok(urls.some(u => u.includes('dates=2023')));
+    assert.ok(urls.some(u => u.includes('dates=2024')));
+    assert.equal(knockouts2023.thirdPlace.length, 0);
+    assert.equal(knockouts2023.qf.length, 1);
+    assert.equal(knockouts2023.qf[0].finishType, 'penalties');
+    assert.equal(knockouts2023.final.length, 1);
+    assert.equal(knockouts2023.final[0].awayWinner, true);
+
+    const knockouts2027 = await getTournamentKnockouts('afc.asian.cup', 2027);
+    assert.equal(knockouts2027.r16.length, 1);
+    assert.equal(knockouts2027.r16[0].status, 'NS');
+    assert.equal(knockouts2027.r16[0].homeScore, null);
   } finally {
     globalThis.fetch = originalFetch;
   }

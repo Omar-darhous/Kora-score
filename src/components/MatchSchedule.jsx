@@ -1,4 +1,4 @@
-import { finishedMatchLabel } from '../services/matchResult';
+import { finishedMatchLabel, isUnplayedMatchStatus, getMatchStatusLabel } from '../services/matchResult';
 import RequestState from './RequestState';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -408,8 +408,8 @@ const MatchSchedule = ({
                       {/* Center Score & Time */}
                       <div className="match-score-center">
                         <div className="score-display-pill">
-                          {match.status === 'NS' ? (
-                            <span className="match-time-text">{match.time}</span>
+                          {isUnplayedMatchStatus(match.status) || !Number.isFinite(match.homeScore) || !Number.isFinite(match.awayScore) ? (
+                            <span className="match-time-text">{match.status === 'NS' ? match.time : 'VS'}</span>
                           ) : (
                             <>
                               <span className="score-num">{match.homeScore}</span>
@@ -433,6 +433,11 @@ const MatchSchedule = ({
                         {match.status === 'NS' && (
                           <span className="match-status-tag ns">
                             لم تبدأ
+                          </span>
+                        )}
+                        {['POSTPONED', 'CANCELLED', 'ABANDONED', 'SUSPENDED'].includes(match.status) && (
+                          <span className="match-status-tag ns">
+                            {getMatchStatusLabel(match)}
                           </span>
                         )}
                       </div>

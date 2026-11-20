@@ -3,11 +3,52 @@ const numberOrNull = value => {
   const raw = value?.value ?? value?.displayValue ?? value;
   return raw !== null && raw !== undefined && raw !== '' && Number.isFinite(Number(raw)) ? Number(raw) : null;
 };
+
+const UNPLAYED_STATUS_CODES = new Set(['NS', 'UPCOMING', 'POSTPONED', 'CANCELLED', 'ABANDONED', 'SUSPENDED']);
+
+/**
+ * Normalizes ESPN match status objects/types safely.
+ * Explicit postponed/cancelled/abandoned/suspended statuses or completed === false
+ * are NEVER treated as FT even when ESPN sends state === 'post'.
+ */
+export function resolveEspnMatchStatus(statusOrType) {
+  const type = statusOrType?.type || statusOrType || {};
+  const text = [type.name, type.description, type.detail, type.shortDetail]
+    .filter(Boolean)
+    .join(' ');
+
+  if (/postpon/i.test(text)) return 'POSTPONED';
+  if (/cancel/i.test(text)) return 'CANCELLED';
+  if (/abandon/i.test(text)) return 'ABANDONED';
+  if (/suspend/i.test(text)) return 'SUSPENDED';
+  if (type.state === 'in') return 'LIVE';
+  if (type.state === 'pre') return 'NS';
+  if (type.completed === false) return 'NS';
+  if (type.completed === true || type.state === 'post') return 'FT';
+  return 'NS';
+}
+
+export function isUnplayedMatchStatus(status) {
+  return UNPLAYED_STATUS_CODES.has(String(status || '').toUpperCase().trim());
+}
+
+export function getMatchStatusLabel(match = {}) {
+  const code = String(match?.status || '').toUpperCase().trim();
+  if (code === 'POSTPONED') return 'مؤجلة';
+  if (code === 'CANCELLED') return 'ملغاة';
+  if (code === 'ABANDONED') return 'متوقفة';
+  if (code === 'SUSPENDED') return 'معلّقة';
+  if (code === 'LIVE') return 'مباشر';
+  if (code === 'FT' || code === 'FINISHED') return finishedMatchLabel(match);
+  return 'لم تبدأ';
+}
+
 export function parseMatchResult(status, competitors = []) {
   const home = competitors.find(c => c.homeAway === 'home') || {};
   const away = competitors.find(c => c.homeAway === 'away') || {};
   const type = status?.type || {};
-  const finished = type.state === 'post' || type.completed === true;
+  const normalizedStatus = resolveEspnMatchStatus(status);
+  const finished = normalizedStatus === 'FT';
   const description = [type.name, type.detail, type.shortDetail, type.description].filter(Boolean).join(' ');
   const penalties = /PEN|shoot.?out/i.test(description);
   const extraTime = /AET|extra.?time/i.test(description);
@@ -24,10 +65,10 @@ export function parseMatchResult(status, competitors = []) {
     regulationScore: finished && regularHome !== null && regularAway !== null ? [regularHome, regularAway] : null,
     extraTimeScore: finished && extraHome !== null && extraAway !== null && (penalties || extraTime) ? [extraHome, extraAway] : null,
     finishType: finished ? (penalties ? 'penalties' : extraTime ? 'extra-time' : 'regular') : null,
-    homePenalties: numberOrNull(home.shootoutScore),
-    awayPenalties: numberOrNull(away.shootoutScore),
-    homeWinner: home.winner === true,
-    awayWinner: away.winner === true,
+    homePenalties: finished ? numberOrNull(home.shootoutScore) : null,
+    awayPenalties: finished ? numberOrNull(away.shootoutScore) : null,
+    homeWinner: finished && home.winner === true,
+    awayWinner: finished && away.winner === true,
     statusDetail: type.detail || ''
   };
 }
@@ -175,24 +216,28 @@ export function getTeamMatchOutcome(match, viewedTeamId) {
 export function getFavoriteMatchDisplay(match = {}) {
   const isEgyMatch = match.leagueId === 'egypt.1';
   const isUpcoming = isUpcomingMatch(match);
+  const isUnplayed = isUnplayedMatchStatus(match.status);
   const isLive = match.status === 'LIVE';
   const isFinished = ['FT', 'FINISHED'].includes(match.status);
   let statusLabel = 'لم تبدأ';
   if (isEgyMatch) {
     if (isLive) statusLabel = 'جارية (تجريبية)';
     else if (isFinished) statusLabel = finishedMatchLabel(match) + ' (تجريبية)';
+    else if (isUnplayed && !isUpcoming) statusLabel = getMatchStatusLabel(match) + ' (تجريبية)';
     else statusLabel = match.time || 'مجدولة (تجريبية)';
   } else {
     if (isLive) statusLabel = `مباشر • ${match.minute || ''}`;
     else if (isFinished) statusLabel = finishedMatchLabel(match);
+    else if (isUnplayed && !isUpcoming) statusLabel = getMatchStatusLabel(match);
     else statusLabel = match.time || 'قادمة';
   }
+  const hasScores = Number.isFinite(match.homeScore) && Number.isFinite(match.awayScore);
   return {
     isEgyMatch,
     isUpcoming,
     isLive,
     isFinished,
     statusLabel,
-    centerText: isUpcoming ? 'VS' : `${match.homeScore} - ${match.awayScore}`
+    centerText: isUnplayed || !hasScores ? 'VS' : `${match.homeScore} - ${match.awayScore}`
   };
 }

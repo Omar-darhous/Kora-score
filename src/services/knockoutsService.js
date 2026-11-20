@@ -1,17 +1,18 @@
 import { cachedJson } from './requestCache.js';
-import { parseMatchResult } from './matchResult.js';
+import { parseMatchResult, resolveEspnMatchStatus } from './matchResult.js';
 import { classifyRound, rounds, isUefaClubTournament } from './tournamentRules.js';
 
 // جلب تفاصيل مباريات الأدوار الإقصائية لكأس العالم وترتيبها في هيكل الشجرة
 export const getTournamentKnockouts = async (leagueId, seasonYear) => {
   const year = Number(seasonYear);
   if (!Number.isInteger(year) || year < 1900) throw new Error('Season unavailable');
-  // European club seasons and cross-year/postponed international editions (AFCON, EURO 2020, Copa 2021) span into year + 1.
+  // European club seasons and cross-year/postponed international editions (AFCON, EURO 2020, Copa 2021, Asian Cup 2023) span into year + 1.
   const years =
     isUefaClubTournament(leagueId) ||
     leagueId === 'uefa.euro' ||
     leagueId === 'caf.nations' ||
-    leagueId === 'conmebol.america'
+    leagueId === 'conmebol.america' ||
+    leagueId === 'afc.asian.cup'
       ? [year, year + 1]
       : [year];
   const pages = await Promise.all(years.map(async calendarYear => {
@@ -30,15 +31,18 @@ export const getTournamentKnockouts = async (leagueId, seasonYear) => {
     const home = comp.competitors?.find(c => c.homeAway === 'home') || {};
     const away = comp.competitors?.find(c => c.homeAway === 'away') || {};
     const status = event.status || comp.status;
-    const score = value => value !== '' && value != null && Number.isFinite(Number(value)) ? Number(value) : null;
+    const normalizedStatus = resolveEspnMatchStatus(status);
+    const hasPlayedScore = normalizedStatus === 'FT' || normalizedStatus === 'LIVE';
+    const score = value => hasPlayedScore && value !== '' && value != null && Number.isFinite(Number(value)) ? Number(value) : null;
     result[stage].push({
       id: event.id, leagueId, date: event.date, knockoutStage: stage,
       homeTeamId: home.team?.id, awayTeamId: away.team?.id,
       homeTeam: home.team?.displayName || 'لم يتحدد بعد', awayTeam: away.team?.displayName || 'لم يتحدد بعد',
       homeLogo: home.team?.logo, awayLogo: away.team?.logo,
       homeScore: score(home.score), awayScore: score(away.score),
-      homeWinner: home.winner === true, awayWinner: away.winner === true,
-      status: status?.type?.state === 'post' ? 'FT' : status?.type?.state === 'in' ? 'LIVE' : 'NS',
+      homeWinner: normalizedStatus === 'FT' && home.winner === true,
+      awayWinner: normalizedStatus === 'FT' && away.winner === true,
+      status: normalizedStatus,
       ...parseMatchResult(status, comp.competitors),
       time: new Date(event.date).toLocaleString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     });

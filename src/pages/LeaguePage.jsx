@@ -1,4 +1,4 @@
-import { finishedMatchLabel } from '../services/matchResult';
+import { finishedMatchLabel, isUnplayedMatchStatus, getMatchStatusLabel } from '../services/matchResult';
 import RequestState from '../components/RequestState';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
@@ -672,8 +672,8 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
 
                             <div className="match-score-center">
                               <div className="score-display-pill">
-                                {match.status === 'NS' ? (
-                                  <span className="match-time-text">{match.time}</span>
+                                {isUnplayedMatchStatus(match.status) || !Number.isFinite(match.homeScore) || !Number.isFinite(match.awayScore) ? (
+                                  <span className="match-time-text">{match.status === 'NS' ? match.time : 'VS'}</span>
                                 ) : (
                                   <>
                                     <span className="score-num">{match.homeScore}</span>
@@ -685,6 +685,9 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
 
                               {match.status === 'FT' && (
                                 <span className="match-status-tag ft">{finishedMatchLabel(match)}</span>
+                              )}
+                              {['POSTPONED', 'CANCELLED', 'ABANDONED', 'SUSPENDED'].includes(match.status) && (
+                                <span className="match-status-tag ns">{getMatchStatusLabel(match)}</span>
                               )}
                               {match.roundName && match.roundName !== 'الدوري المنتظم' && (
                                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
@@ -772,8 +775,8 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
                         {/* النتيجة والتوقيت */}
                         <div className="match-score-center">
                           <div className="score-display-pill">
-                            {match.status === 'NS' ? (
-                              <span className="match-time-text">{match.time}</span>
+                            {isUnplayedMatchStatus(match.status) || !Number.isFinite(match.homeScore) || !Number.isFinite(match.awayScore) ? (
+                              <span className="match-time-text">{match.status === 'NS' ? match.time : 'VS'}</span>
                             ) : (
                               <>
                                 <span className="score-num">{match.homeScore}</span>
@@ -791,6 +794,9 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
                           )}
                           {match.status === 'FT' && (
                             <span className="match-status-tag ft">{finishedMatchLabel(match)}</span>
+                          )}
+                          {['POSTPONED', 'CANCELLED', 'ABANDONED', 'SUSPENDED'].includes(match.status) && (
+                            <span className="match-status-tag ns">{getMatchStatusLabel(match)}</span>
                           )}
                         </div>
 

@@ -1,4 +1,4 @@
-import { finishedMatchLabel } from '../services/matchResult';
+import { finishedMatchLabel, isUnplayedMatchStatus, getMatchStatusLabel } from '../services/matchResult';
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Award, BarChart2, Users, Clock, Activity, Shield } from 'lucide-react';
@@ -89,11 +89,11 @@ const MatchDetailModal = ({ match, details, loading, onClose, isStandalone = fal
                 {match.status === 'LIVE' && <span className="live-dot" />}
                 {match.status === 'LIVE' ? (
                   <>مباشر (<bdi>{String(match.minute ?? '').replace(/['"’`]/g, '').trim()}</bdi> د)</>
-                ) : match.status === 'FT' ? finishedMatchLabel(match) : 'لم تبدأ بعد'}
+                ) : match.status === 'FT' ? finishedMatchLabel(match) : ['POSTPONED', 'CANCELLED', 'ABANDONED', 'SUSPENDED'].includes(match.status) ? getMatchStatusLabel(match) : 'لم تبدأ بعد'}
               </span>
 
               <span className="details-score">
-                {match.status === 'NS' ? 'VS' : `${match.homeScore} - ${match.awayScore}`}
+                {isUnplayedMatchStatus(match.status) || !Number.isFinite(match.homeScore) || !Number.isFinite(match.awayScore) ? 'VS' : `${match.homeScore} - ${match.awayScore}`}
               </span>
 
               {['extra-time', 'penalties'].includes(match.finishType) && <div className="match-period-summary">
