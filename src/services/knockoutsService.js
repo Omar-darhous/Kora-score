@@ -6,10 +6,14 @@ import { classifyRound, rounds, isUefaClubTournament } from './tournamentRules.j
 export const getTournamentKnockouts = async (leagueId, seasonYear) => {
   const year = Number(seasonYear);
   if (!Number.isInteger(year) || year < 1900) throw new Error('Season unavailable');
-  // European club seasons, AFCON editions, and EURO 2020 (played in 2021) can span into year + 1.
-  const years = isUefaClubTournament(leagueId) || leagueId === 'uefa.euro' || leagueId === 'caf.nations'
-    ? [year, year + 1]
-    : [year];
+  // European club seasons and cross-year/postponed international editions (AFCON, EURO 2020, Copa 2021) span into year + 1.
+  const years =
+    isUefaClubTournament(leagueId) ||
+    leagueId === 'uefa.euro' ||
+    leagueId === 'caf.nations' ||
+    leagueId === 'conmebol.america'
+      ? [year, year + 1]
+      : [year];
   const pages = await Promise.all(years.map(async calendarYear => {
     return cachedJson(`https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/scoreboard?dates=${calendarYear}&limit=1000`, { ttl: 15000, timeout: 20000 });
   }));

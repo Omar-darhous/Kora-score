@@ -65,6 +65,8 @@ const formatSeasonLabel = (year, displayName = '') => {
     }
     const fullSpan = displayName.match(/\b(\d{4})[/-](\d{4})\b/);
     if (fullSpan) return `${fullSpan[1]}/${fullSpan[2]}`;
+    const singleYear = displayName.match(/\b(19\d{2}|20\d{2})\b/);
+    if (singleYear) return singleYear[1];
   }
   return String(year);
 };

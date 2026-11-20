@@ -4,6 +4,7 @@ import { isTournament, isNationalTournament, isUefaClubTournament, classifyRound
 import { getTournamentKnockouts, getLeagues, resolveLeagueLogo, resolveTeamLogo, DEFAULT_TEAM_LOGO } from '../src/services/footballService.js';
 import { getQuickSuggestions, searchAll } from '../src/services/searchService.js';
 import { getSeasonCalendarYears, organizeHistoricalMatches } from '../src/services/historicalMatchesService.js';
+import { parseAvailableSeasons } from '../src/services/standingsService.js';
 import { buildBracket } from '../src/services/bracketLayout.js';
 
 test('round classification keeps round of 32 and bronze distinct from final', () => {
@@ -58,6 +59,7 @@ test('league and team logo URLs use verified ESPN leaguelogos/teamlogos paths, e
     'fifa.world': '4',
     'caf.nations': '76',
     'uefa.euro': '74',
+    'conmebol.america': '83',
     'usa.1': '19'
   };
 
@@ -472,6 +474,155 @@ test('EURO (uefa.euro) registration, UEFA club separation, 24-team and 16-team f
     assert.equal(knockouts2020.final[0].finishType, 'penalties');
     assert.equal(knockouts2020.final[0].homePenalties, 3);
     assert.equal(knockouts2020.final[0].homeWinner, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Copa America (conmebol.america) registration, search, 2024 vs 2021 formats, 2020/2021 season label, knockouts, and no R16', async () => {
+  const leagues = getLeagues();
+  const copa = leagues.find(l => l.id === 'conmebol.america');
+  assert.ok(copa, 'conmebol.america must be registered in getLeagues()');
+  assert.equal(copa.name, 'كوبا أمريكا');
+  assert.equal(copa.logo, 'https://a.espncdn.com/i/leaguelogos/soccer/500/83.png');
+  assert.equal(isTournament('conmebol.america'), true);
+  assert.equal(isNationalTournament('conmebol.america'), true);
+  assert.equal(isUefaClubTournament('conmebol.america'), false);
+
+  // Arabic & English search aliases
+  for (const query of ['كوبا أمريكا', 'كوبا امريكا', 'كوبا', 'Copa América', 'Copa America', 'CONMEBOL Copa America']) {
+    const res = searchAll({ query, leagues, matches: [] });
+    assert.equal(res.leagues.some(l => l.id === 'conmebol.america'), true, `search query "${query}" must match conmebol.america`);
+  }
+
+  // Internal season ID 2020 preserved while user-facing label displays official edition year 2021
+  const parsedSeasons = parseAvailableSeasons([
+    { year: 2024, displayName: '2024 Copa América' },
+    { year: 2020, displayName: '2021 Copa América' },
+    { year: 2019, displayName: '2019 Copa América' }
+  ], { currentSeasonYear: 2024 });
+  const copa2021Season = parsedSeasons.find(s => s.year === 2020);
+  assert.equal(copa2021Season?.year, 2020);
+  assert.equal(copa2021Season?.label, '2021');
+  assert.equal(parsedSeasons[0]?.label, '2024');
+
+  // 2024 format: 4 groups x 4 teams, 3 games -> top 2 directly to Quarterfinals, 3rd & 4th eliminated (no R16, no best-thirds)
+  const groups2024 = Array.from({ length: 4 }, (_, g) => ({
+    name: `Group ${String.fromCharCode(65 + g)}`,
+    season: { year: 2024 },
+    entries: Array.from({ length: 4 }, (_, r) => ({ teamId: `ca24-${g}-${r}`, rank: r + 1, played: 3 }))
+  }));
+  assert.equal(qualification('conmebol.america', groups2024[0].entries[0], groups2024, null)?.label, 'تأهل إلى ربع النهائي');
+  assert.equal(qualification('conmebol.america', groups2024[0].entries[1], groups2024, null)?.label, 'تأهل إلى ربع النهائي');
+  assert.equal(qualification('conmebol.america', groups2024[0].entries[2], groups2024, null)?.label, 'خرج من دور المجموعات');
+  assert.equal(qualification('conmebol.america', groups2024[0].entries[3], groups2024, null)?.label, 'خرج من دور المجموعات');
+
+  // 2024 provisional during group stage (2 games played)
+  const groups2024Live = Array.from({ length: 4 }, (_, g) => ({
+    name: `Group ${String.fromCharCode(65 + g)}`,
+    season: { year: 2024 },
+    entries: Array.from({ length: 4 }, (_, r) => ({ teamId: `ca24l-${g}-${r}`, rank: r + 1, played: 2 }))
+  }));
+  assert.equal(qualification('conmebol.america', groups2024Live[0].entries[0], groups2024Live, null)?.label, 'مركز مؤهل إلى ربع النهائي');
+  assert.equal(qualification('conmebol.america', groups2024Live[0].entries[2], groups2024Live, null)?.label, 'خارج مراكز التأهل حالياً');
+
+  // 2021 edition (ESPN season.year = 2020): 2 groups x 5 teams, 4 games -> top 4 to Quarterfinals, 5th eliminated
+  const groups2021 = Array.from({ length: 2 }, (_, g) => ({
+    name: `Group ${g + 1}`,
+    season: { year: 2020 },
+    entries: Array.from({ length: 5 }, (_, r) => ({ teamId: `ca21-${g}-${r}`, rank: r + 1, played: 4 }))
+  }));
+  assert.equal(qualification('conmebol.america', groups2021[0].entries[0], groups2021, null)?.label, 'تأهل إلى ربع النهائي');
+  assert.equal(qualification('conmebol.america', groups2021[0].entries[3], groups2021, null)?.label, 'تأهل إلى ربع النهائي');
+  assert.equal(qualification('conmebol.america', groups2021[0].entries[4], groups2021, null)?.label, 'خرج من دور المجموعات');
+
+  // Cross-year fetching for 2020/2021 edition & stage sequence without Round of 16
+  assert.deepEqual(getSeasonCalendarYears('conmebol.america', 2020), [2020, 2021]);
+  assert.deepEqual(getSeasonCalendarYears('conmebol.america', 2024), [2024, 2025]);
+
+  const copaFixtures = [
+    { id: 'ca-gs', date: '2024-06-20T23:00Z', dateKey: '2024-06-20', dateTs: Date.parse('2024-06-20T23:00Z'), seasonSlug: 'group-stage' },
+    { id: 'ca-qf', date: '2024-07-04T23:00Z', dateKey: '2024-07-04', dateTs: Date.parse('2024-07-04T23:00Z'), seasonSlug: 'quarterfinals' },
+    { id: 'ca-sf', date: '2024-07-09T23:00Z', dateKey: '2024-07-09', dateTs: Date.parse('2024-07-09T23:00Z'), seasonSlug: 'semifinals' },
+    { id: 'ca-3rd', date: '2024-07-13T23:00Z', dateKey: '2024-07-13', dateTs: Date.parse('2024-07-13T23:00Z'), seasonSlug: '3rd-place-match' },
+    { id: 'ca-fin', date: '2024-07-14T23:00Z', dateKey: '2024-07-14', dateTs: Date.parse('2024-07-14T23:00Z'), seasonSlug: 'final' }
+  ];
+  const organized = organizeHistoricalMatches(copaFixtures, 'conmebol.america');
+  assert.equal(organized.mode, 'stages');
+  assert.deepEqual(organized.groups.map(g => g.id), [
+    'stage-group-stage',
+    'stage-qf',
+    'stage-sf',
+    'stage-third-place',
+    'stage-final'
+  ]);
+  assert.equal(organized.groups.some(g => g.id === 'stage-r16'), false);
+
+  // getTournamentKnockouts queries [2020, 2021] for Copa 2021 (season.year=2020) and captures 3rd-place + PEN + final
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    const str = String(url);
+    urls.push(str);
+    if (str.includes('/summary?')) return { ok: true, json: async () => ({}) };
+    if (str.includes('dates=2021')) {
+      return {
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              id: 'copa21-sf-pen',
+              season: { year: 2020, slug: 'semifinals' },
+              date: '2021-07-07T01:00Z',
+              status: { type: { state: 'post', completed: true, name: 'STATUS_FINAL_PEN', detail: 'FT-Pens' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '1', shootoutScore: '3', winner: true, team: { id: '202', displayName: 'Argentina' } },
+                  { homeAway: 'away', score: '1', shootoutScore: '2', winner: false, team: { id: '208', displayName: 'Colombia' } }
+                ]
+              }]
+            },
+            {
+              id: 'copa21-3rd',
+              season: { year: 2020, slug: '3rd-place' },
+              date: '2021-07-10T00:00Z',
+              status: { type: { state: 'post', completed: true, name: 'STATUS_FULL_TIME' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '3', winner: true, team: { id: '208', displayName: 'Colombia' } },
+                  { homeAway: 'away', score: '2', winner: false, team: { id: '211', displayName: 'Peru' } }
+                ]
+              }]
+            },
+            {
+              id: 'copa21-final',
+              season: { year: 2020, slug: 'final' },
+              date: '2021-07-11T00:00Z',
+              status: { type: { state: 'post', completed: true, name: 'STATUS_FULL_TIME' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '1', winner: true, team: { id: '202', displayName: 'Argentina' } },
+                  { homeAway: 'away', score: '0', winner: false, team: { id: '205', displayName: 'Brazil' } }
+                ]
+              }]
+            }
+          ]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({ events: [] }) };
+  };
+
+  try {
+    const knockouts2021 = await getTournamentKnockouts('conmebol.america', 2020);
+    assert.ok(urls.some(u => u.includes('dates=2020')));
+    assert.ok(urls.some(u => u.includes('dates=2021')));
+    assert.equal(knockouts2021.r16.length, 0);
+    assert.equal(knockouts2021.sf.length, 1);
+    assert.equal(knockouts2021.sf[0].finishType, 'penalties');
+    assert.equal(knockouts2021.thirdPlace.length, 1);
+    assert.equal(knockouts2021.final.length, 1);
+    assert.equal(knockouts2021.final[0].homeWinner, true);
   } finally {
     globalThis.fetch = originalFetch;
   }
