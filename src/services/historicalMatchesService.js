@@ -262,7 +262,11 @@ export const organizeHistoricalMatches = (matches = [], leagueId = '') => {
   }
 
   const validMatches = matches.filter(Boolean);
-  const isTournamentCompetition = leagueId.startsWith('uefa.') || leagueId === 'fifa.world' || leagueId === 'usa.1';
+  const isTournamentCompetition =
+    leagueId.startsWith('uefa.') ||
+    leagueId === 'fifa.world' ||
+    leagueId === 'caf.nations' ||
+    leagueId === 'usa.1';
 
   // 1. Stage-based organization for multi-stage competitions (UCL, UEL, World Cup, MLS)
   const stageMap = new Map();

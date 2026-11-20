@@ -20,6 +20,7 @@ import SeasonSelector from '../components/SeasonSelector';
 import Dropdown from '../components/Dropdown';
 import FavoriteButton from '../components/FavoriteButton';
 import { createStandingsController } from '../services/footballService';
+import { isNationalTournament } from '../services/tournamentRules';
 import {
   parseSeasonQueryParam,
   buildSeasonSearchParams,
@@ -318,11 +319,11 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
                 </span>
               )}
 
-              {/* عدد الأندية المشاركة */}
+              {/* عدد الأندية / المنتخبات المشاركة */}
               {totalTeamsCount > 0 && (
                 <span className="league-badge teams-count-badge">
                   <Users size={13} color="var(--text-secondary)" />
-                  <span>{totalTeamsCount} نادياً</span>
+                  <span>{totalTeamsCount} {isNationalTournament(leagueId) ? 'منتخباً' : 'نادياً'}</span>
                 </span>
               )}
             </div>

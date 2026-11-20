@@ -489,7 +489,7 @@ const LeagueStandings = ({
 
       {isTournament(activeLeague) && <div className="glass-card request-state" role="note">
         <strong>{standingsGroups[0]?.season?.displayName || 'موسم البطولة'}</strong>
-        <p>{activeLeague === 'fifa.world' && Number(seasonYear) === 2026 ? 'يتأهل أول وثاني كل مجموعة وأفضل 8 ثوالث إلى دور الـ32. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ32 المنشورة.' : activeLeague.startsWith('uefa.') && Number(seasonYear) >= 2024 ? 'المراكز 1–8 إلى دور الـ16، والمراكز 9–24 إلى الملحق. المراكز الحالية لا تعني ضمان التأهل قبل اكتمال مرحلة الدوري.' : 'تُعرض قواعد التأهل وفق موسم البطولة المتاح.'}</p>
+        <p>{activeLeague === 'fifa.world' && Number(seasonYear) === 2026 ? 'يتأهل أول وثاني كل مجموعة وأفضل 8 ثوالث إلى دور الـ32. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ32 المنشورة.' : activeLeague === 'caf.nations' && Number(seasonYear) >= 2019 ? 'يتأهل أول وثاني كل مجموعة وأفضل 4 ثوالث إلى دور الـ16. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ16 المنشورة.' : activeLeague.startsWith('uefa.') && Number(seasonYear) >= 2024 ? 'المراكز 1–8 إلى دور الـ16، والمراكز 9–24 إلى الملحق. المراكز الحالية لا تعني ضمان التأهل قبل اكتمال مرحلة الدوري.' : 'تُعرض قواعد التأهل وفق موسم البطولة المتاح.'}</p>
         {knockoutError && subTab === 'groups' && <button type="button" className="tab-btn" onClick={() => setKnockoutRetry(n => n + 1)}>تعذر التحقق من المتأهلين — إعادة المحاولة</button>}
       </div>}
       {suppressDomesticZones && standingsGroups.length > 0 && (
@@ -596,110 +596,110 @@ const LeagueStandings = ({
                     aria-label={group.name || 'جدول الترتيب'}
                     tabIndex={0}
                   >
-                  <table className="standings-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: 50, textAlign: 'center' }}>#</th>
-                        <th style={{ textAlign: 'right' }}>الفريق</th>
-                        <th style={{ width: 50, textAlign: 'center' }}>لعب</th>
-                        <th style={{ width: 45, textAlign: 'center' }}>فاز</th>
-                        <th style={{ width: 45, textAlign: 'center' }}>تعادل</th>
-                        <th style={{ width: 45, textAlign: 'center' }}>خسر</th>
-                        <th style={{ width: 80, textAlign: 'center' }}>أهداف</th>
-                        <th style={{ width: 60, textAlign: 'center' }}>نقاط</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.entries.map((team, idx) => {
-                        const zone = getZone(team);
-                        return (
-                          <motion.tr
-                            key={team.team}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.04 }}
-                            style={zone ? { backgroundColor: zone.bg } : undefined}
-                          >
-                            <td
-                              className="team-rank"
-                              style={zone ? { borderRight: zone.borderRight, textAlign: 'center' } : { textAlign: 'center' }}
+                    <table className="standings-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: 50, textAlign: 'center' }}>#</th>
+                          <th style={{ textAlign: 'right' }}>الفريق</th>
+                          <th style={{ width: 50, textAlign: 'center' }}>لعب</th>
+                          <th style={{ width: 45, textAlign: 'center' }}>فاز</th>
+                          <th style={{ width: 45, textAlign: 'center' }}>تعادل</th>
+                          <th style={{ width: 45, textAlign: 'center' }}>خسر</th>
+                          <th style={{ width: 80, textAlign: 'center' }}>أهداف</th>
+                          <th style={{ width: 60, textAlign: 'center' }}>نقاط</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.entries.map((team, idx) => {
+                          const zone = getZone(team);
+                          return (
+                            <motion.tr
+                              key={team.team}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: idx * 0.04 }}
+                              style={zone ? { backgroundColor: zone.bg } : undefined}
                             >
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: 24,
-                                  height: 24,
-                                  borderRadius: '50%',
-                                  background: team.rank === 1 ? 'rgba(251, 191, 36, 0.15)' : 'transparent',
-                                  color: team.rank === 1 ? 'var(--accent)' : 'var(--text-secondary)',
-                                  fontWeight: team.rank === 1 ? 'bold' : 'normal'
-                                }}
+                              <td
+                                className="team-rank"
+                                style={zone ? { borderRight: zone.borderRight, textAlign: 'center' } : { textAlign: 'center' }}
                               >
-                                {team.rank}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <div className="team-cell" style={{ justifyContent: 'space-between', width: '100%' }}>
-                                <div className="d-flex align-center gap-2" style={{ minWidth: 0 }}>
-                                  {team.logo && (
-                                    <img
-                                      src={team.logo}
-                                      alt={team.team}
-                                      className="team-logo"
-                                      style={{ width: 24, height: 24, flexShrink: 0 }}
-                                      onError={(e) => e.target.style.display = 'none'}
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: '50%',
+                                    background: team.rank === 1 ? 'rgba(251, 191, 36, 0.15)' : 'transparent',
+                                    color: team.rank === 1 ? 'var(--accent)' : 'var(--text-secondary)',
+                                    fontWeight: team.rank === 1 ? 'bold' : 'normal'
+                                  }}
+                                >
+                                  {team.rank}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <div className="team-cell" style={{ justifyContent: 'space-between', width: '100%' }}>
+                                  <div className="d-flex align-center gap-2" style={{ minWidth: 0 }}>
+                                    {team.logo && (
+                                      <img
+                                        src={team.logo}
+                                        alt={team.team}
+                                        className="team-logo"
+                                        style={{ width: 24, height: 24, flexShrink: 0 }}
+                                        onError={(e) => e.target.style.display = 'none'}
+                                      />
+                                    )}
+                                    {team.teamId ? (
+                                      <Link
+                                        to={`/team/${team.teamId}?league=${activeLeague}`}
+                                        state={{ leagueId: activeLeague, team }}
+                                        className="standings-team-link"
+                                        style={{
+                                          fontWeight: team.rank === 1 ? 700 : 600,
+                                          color: 'var(--text-primary)',
+                                          textDecoration: 'none'
+                                        }}
+                                      >
+                                        {team.team}
+                                        {isTournament(activeLeague) && zone && <small className="qualification-label" style={{ color: zone.color }}>{zone.label}</small>}
+                                      </Link>
+                                    ) : (
+                                      <span style={{ fontWeight: team.rank === 1 ? 700 : 'normal' }}>{team.team}</span>
+                                    )}
+                                  </div>
+                                  {team.teamId && (
+                                    <FavoriteButton
+                                      type="team"
+                                      item={{
+                                        id: team.teamId,
+                                        name: team.team,
+                                        arabicName: team.team,
+                                        leagueId: activeLeague,
+                                        leagueName: currentLeagueObj?.name || '',
+                                        logo: team.logo,
+                                        isMock: activeLeague === 'egypt.1'
+                                      }}
+                                      size={14}
                                     />
                                   )}
-                                  {team.teamId ? (
-                                    <Link
-                                      to={`/team/${team.teamId}?league=${activeLeague}`}
-                                      state={{ leagueId: activeLeague, team }}
-                                      className="standings-team-link"
-                                      style={{
-                                        fontWeight: team.rank === 1 ? 700 : 600,
-                                        color: 'var(--text-primary)',
-                                        textDecoration: 'none'
-                                      }}
-                                    >
-                                      {team.team}
-                                      {isTournament(activeLeague) && zone && <small className="qualification-label" style={{ color: zone.color }}>{zone.label}</small>}
-                                    </Link>
-                                  ) : (
-                                    <span style={{ fontWeight: team.rank === 1 ? 700 : 'normal' }}>{team.team}</span>
-                                  )}
                                 </div>
-                                {team.teamId && (
-                                  <FavoriteButton
-                                    type="team"
-                                    item={{
-                                      id: team.teamId,
-                                      name: team.team,
-                                      arabicName: team.team,
-                                      leagueId: activeLeague,
-                                      leagueName: currentLeagueObj?.name || '',
-                                      logo: team.logo,
-                                      isMock: activeLeague === 'egypt.1'
-                                    }}
-                                    size={14}
-                                  />
-                                )}
-                              </div>
-                            </td>
-                            <td className="stat-cell">{team.played}</td>
-                            <td className="stat-cell" style={{ color: 'var(--primary)' }}>{team.win}</td>
-                            <td className="stat-cell" style={{ color: 'var(--text-muted)' }}>{team.draw}</td>
-                            <td className="stat-cell" style={{ color: 'var(--danger)' }}>{team.loss}</td>
-                            <td className="stat-cell" style={{ direction: 'ltr', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                              {team.goalsFor}:{team.goalsAgainst}
-                            </td>
-                            <td className="stat-cell points">{team.points}</td>
-                          </motion.tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              </td>
+                              <td className="stat-cell">{team.played}</td>
+                              <td className="stat-cell" style={{ color: 'var(--primary)' }}>{team.win}</td>
+                              <td className="stat-cell" style={{ color: 'var(--text-muted)' }}>{team.draw}</td>
+                              <td className="stat-cell" style={{ color: 'var(--danger)' }}>{team.loss}</td>
+                              <td className="stat-cell" style={{ direction: 'ltr', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                {team.goalsFor}:{team.goalsAgainst}
+                              </td>
+                              <td className="stat-cell points">{team.points}</td>
+                            </motion.tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
 
                   {/* دليل الألوان والمراكز التأهيلية والهبوط في أسفل جدول كل دوري */}

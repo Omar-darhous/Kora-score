@@ -1,6 +1,8 @@
 // UEFA 2024/25 onward: top 8 -> R16, 9-24 -> play-offs (UCL/UEL: 8 games, UECL: 6 games).
 // FIFA 2026: top 2 in 12 groups plus 8 third-place teams -> R32.
-export const isTournament = id => ['fifa.world', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf'].includes(id);
+// AFCON 2019 onward: top 2 in 6 groups plus 4 best third-place teams -> R16.
+export const isNationalTournament = id => ['fifa.world', 'caf.nations'].includes(id);
+export const isTournament = id => ['fifa.world', 'caf.nations', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf'].includes(id);
 export const rounds = [['playoff','ملحق الأدوار الإقصائية'],['r32','دور الـ 32'],['r16','دور الـ 16'],['qf','ربع النهائي'],['sf','نصف النهائي'],['thirdPlace','المركز الثالث'],['final','النهائي']];
 export function classifyRound(text = '') {
   const s = text.toLowerCase().replaceAll('-', ' ');
@@ -37,6 +39,24 @@ export function qualification(id, team, groups, bracket) {
       if (participants.size === 32) return zone('لم يتأهل ضمن أفضل الثوالث', '#ef4444');
       return zone('ينافس على أفضل 8 ثوالث — التأهل غير مؤكد', '#f59e0b');
     }
+    return zone(complete ? 'خرج من دور المجموعات' : 'خارج مراكز التأهل حالياً', '#ef4444');
+  }
+  if (id === 'caf.nations' && year >= 2019 && groups.length === 6 && groups.every(g => g.entries.length === 4)) {
+    const group = groups.find(g => g.entries.some(t => String(t.teamId) === String(team.teamId)));
+    const complete = group?.entries.length === 4 && group.entries.every(t => t.played >= 3);
+    if (team.rank <= 2) return zone(complete ? 'تأهل إلى دور الـ16' : 'مركز مؤهل إلى دور الـ16');
+    if (team.rank === 3) {
+      const participants = new Set((bracket?.r16 || []).flatMap(m => [m.homeTeamId, m.awayTeamId]).filter(Boolean).map(String));
+      if (participants.has(String(team.teamId))) return zone('تأهل ضمن أفضل 4 ثوالث', '#3b82f6');
+      if (participants.size === 16) return zone('لم يتأهل ضمن أفضل الثوالث', '#ef4444');
+      return zone('ينافس على أفضل 4 ثوالث — التأهل غير مؤكد', '#f59e0b');
+    }
+    return zone(complete ? 'خرج من دور المجموعات' : 'خارج مراكز التأهل حالياً', '#ef4444');
+  }
+  if (id === 'caf.nations' && year < 2019 && groups.length === 4 && groups.every(g => g.entries.length === 4)) {
+    const group = groups.find(g => g.entries.some(t => String(t.teamId) === String(team.teamId)));
+    const complete = group?.entries.length === 4 && group.entries.every(t => t.played >= 3);
+    if (team.rank <= 2) return zone(complete ? 'تأهل إلى ربع النهائي' : 'مركز مؤهل إلى ربع النهائي');
     return zone(complete ? 'خرج من دور المجموعات' : 'خارج مراكز التأهل حالياً', '#ef4444');
   }
   // Historical group formats: do not apply a modern league-phase rule.

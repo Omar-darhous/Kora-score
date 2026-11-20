@@ -396,6 +396,7 @@ const LEAGUE_ALIASES = {
   'uefa.europa': ['الدوري الاوروبي', 'اليوروباليج', 'europa league', 'uel'],
   'uefa.europa.conf': ['دوري المؤتمر الأوروبي', 'دوري المؤتمر الاوروبي', 'دوري المؤتمر', 'كونفرنس ليج', 'conference league', 'uefa conference league', 'uecl'],
   'fifa.world': ['كاس العالم', 'المونديال', 'world cup', 'فيفا', 'كأس العالم'],
+  'caf.nations': ['كأس الأمم الإفريقية', 'كأس الامم الافريقية', 'أمم أفريقيا', 'امم افريقيا', 'افريقيا', 'إفريقيا', 'afcon', 'africa cup of nations', 'can'],
   'usa.1': ['الدوري الامريكي', 'ام ال اس', 'mls', 'امريكا']
 };
 

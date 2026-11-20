@@ -6,8 +6,8 @@ import { classifyRound, rounds } from './tournamentRules.js';
 export const getTournamentKnockouts = async (leagueId, seasonYear) => {
   const year = Number(seasonYear);
   if (!Number.isInteger(year) || year < 1900) throw new Error('Season unavailable');
-  // European seasons span two calendar years; never mix different seasons.
-  const years = leagueId.startsWith('uefa.') ? [year, year + 1] : [year];
+  // European seasons and cross-year AFCON editions span two calendar years; never mix different seasons.
+  const years = leagueId.startsWith('uefa.') || leagueId === 'caf.nations' ? [year, year + 1] : [year];
   const pages = await Promise.all(years.map(async calendarYear => {
     return cachedJson(`https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/scoreboard?dates=${calendarYear}&limit=1000`, { ttl: 15000, timeout: 20000 });
   }));

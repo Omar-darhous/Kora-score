@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isTournament, classifyRound, qualification } from '../src/services/tournamentRules.js';
+import { isTournament, isNationalTournament, classifyRound, qualification } from '../src/services/tournamentRules.js';
 import { getTournamentKnockouts, getLeagues, resolveLeagueLogo, resolveTeamLogo, DEFAULT_TEAM_LOGO } from '../src/services/footballService.js';
 import { getQuickSuggestions, searchAll } from '../src/services/searchService.js';
-import { getSeasonCalendarYears } from '../src/services/historicalMatchesService.js';
+import { getSeasonCalendarYears, organizeHistoricalMatches } from '../src/services/historicalMatchesService.js';
 import { buildBracket } from '../src/services/bracketLayout.js';
 
 test('round classification keeps round of 32 and bronze distinct from final', () => {
@@ -56,6 +56,7 @@ test('league and team logo URLs use verified ESPN leaguelogos/teamlogos paths, e
     'uefa.europa': '2310',
     'uefa.europa.conf': '20296',
     'fifa.world': '4',
+    'caf.nations': '76',
     'usa.1': '19'
   };
 
@@ -178,4 +179,161 @@ test('UEFA Conference League registration, search aliases, modern 6-match league
   assert.deepEqual(sfNode.match.aggregateScore, [5, 1]);
   assert.equal(sfNode.next, finalNode.id);
   assert.equal(Boolean(finalNode.match.isTwoLegged), false);
+});
+
+test('AFCON (caf.nations) registration, search, 24-team best-4-thirds rules, older 16-team format, cross-year knockouts, and stage grouping', async () => {
+  const leagues = getLeagues();
+  const afcon = leagues.find(l => l.id === 'caf.nations');
+  assert.ok(afcon, 'caf.nations must be registered in getLeagues()');
+  assert.equal(afcon.name, 'كأس الأمم الإفريقية');
+  assert.equal(afcon.logo, 'https://a.espncdn.com/i/leaguelogos/soccer/500/76.png');
+  assert.equal(isTournament('caf.nations'), true);
+  assert.equal(isNationalTournament('caf.nations'), true);
+  assert.equal(isNationalTournament('uefa.champions'), false);
+
+  // Arabic & English search aliases
+  for (const query of ['كأس الأمم الإفريقية', 'كأس الامم الافريقية', 'أمم أفريقيا', 'افريقيا', 'AFCON', 'Africa Cup of Nations', 'CAN']) {
+    const res = searchAll({ query, leagues, matches: [] });
+    assert.equal(res.leagues.some(l => l.id === 'caf.nations'), true, `search query "${query}" must match caf.nations`);
+  }
+
+  // Modern 24-team AFCON format (2021, 2023, 2025): 6 groups x 4 teams
+  const buildAfconGroups = (year, played = 3) =>
+    Array.from({ length: 6 }, (_, g) => ({
+      name: `Group ${String.fromCharCode(65 + g)}`,
+      season: { year },
+      entries: Array.from({ length: 4 }, (_, r) => ({
+        teamId: `g${g}-r${r + 1}`,
+        rank: r + 1,
+        played
+      }))
+    }));
+
+  // Completed group stage + verified R16 bracket with exactly 4 qualified third-placed teams (groups A,B,C,D) and 2 eliminated (E,F)
+  const groups2023 = buildAfconGroups(2023, 3);
+  const r16Participants = [
+    ...groups2023.flatMap(g => [g.entries[0].teamId, g.entries[1].teamId]),
+    'g0-r3', 'g1-r3', 'g2-r3', 'g3-r3'
+  ];
+  const r16Bracket = {
+    r16: Array.from({ length: 8 }, (_, i) => ({
+      homeTeamId: r16Participants[i * 2],
+      awayTeamId: r16Participants[i * 2 + 1]
+    }))
+  };
+
+  // Top 2 qualify for R16; 4th eliminated
+  assert.equal(qualification('caf.nations', groups2023[0].entries[0], groups2023, r16Bracket)?.label, 'تأهل إلى دور الـ16');
+  assert.equal(qualification('caf.nations', groups2023[0].entries[1], groups2023, r16Bracket)?.label, 'تأهل إلى دور الـ16');
+  assert.equal(qualification('caf.nations', groups2023[0].entries[3], groups2023, r16Bracket)?.label, 'خرج من دور المجموعات');
+
+  // Exactly 4 qualified third-placed teams and 2 non-qualified third-placed teams
+  const thirdOutcomes = groups2023.map(g => qualification('caf.nations', g.entries[2], groups2023, r16Bracket)?.label);
+  assert.equal(thirdOutcomes.filter(l => l === 'تأهل ضمن أفضل 4 ثوالث').length, 4);
+  assert.equal(thirdOutcomes.filter(l => l === 'لم يتأهل ضمن أفضل الثوالث').length, 2);
+
+  // Incomplete group stage / missing R16 bracket -> neutral provisional third-place label (never marks all 6 as qualified!)
+  const groups2025Live = buildAfconGroups(2025, 2);
+  assert.equal(qualification('caf.nations', groups2025Live[0].entries[0], groups2025Live, null)?.label, 'مركز مؤهل إلى دور الـ16');
+  assert.equal(qualification('caf.nations', groups2025Live[0].entries[2], groups2025Live, null)?.label, 'ينافس على أفضل 4 ثوالث — التأهل غير مؤكد');
+  assert.equal(qualification('caf.nations', groups2025Live[0].entries[3], groups2025Live, null)?.label, 'خارج مراكز التأهل حالياً');
+
+  // Older 16-team AFCON edition (2017: 4 groups x 4 teams -> top 2 to Quarterfinals, no best-thirds)
+  const oldGroups2017 = Array.from({ length: 4 }, (_, g) => ({
+    name: `Group ${g + 1}`,
+    season: { year: 2017 },
+    entries: Array.from({ length: 4 }, (_, r) => ({ teamId: `old-${g}-${r}`, rank: r + 1, played: 3 }))
+  }));
+  assert.equal(qualification('caf.nations', oldGroups2017[0].entries[0], oldGroups2017, null)?.label, 'تأهل إلى ربع النهائي');
+  assert.equal(qualification('caf.nations', oldGroups2017[0].entries[2], oldGroups2017, null)?.label, 'خرج من دور المجموعات');
+
+  // Cross-calendar-year editions (2021 -> 2022, 2023 -> 2024, 2025 -> 2025/2026)
+  assert.deepEqual(getSeasonCalendarYears('caf.nations', 2021), [2021, 2022]);
+  assert.deepEqual(getSeasonCalendarYears('caf.nations', 2023), [2023, 2024]);
+  assert.deepEqual(getSeasonCalendarYears('caf.nations', 2025), [2025, 2026]);
+
+  // Historical stage grouping preserves all 6 AFCON stages including 3rd-place match
+  const afconFixtures = [
+    { id: 'af-gs', date: '2024-01-13T20:00Z', dateKey: '2024-01-13', dateTs: Date.parse('2024-01-13T20:00Z'), seasonSlug: 'group-stage' },
+    { id: 'af-r16', date: '2024-01-27T17:00Z', dateKey: '2024-01-27', dateTs: Date.parse('2024-01-27T17:00Z'), seasonSlug: 'round-of-16' },
+    { id: 'af-qf', date: '2024-02-02T17:00Z', dateKey: '2024-02-02', dateTs: Date.parse('2024-02-02T17:00Z'), seasonSlug: 'quarterfinals' },
+    { id: 'af-sf', date: '2024-02-07T17:00Z', dateKey: '2024-02-07', dateTs: Date.parse('2024-02-07T17:00Z'), seasonSlug: 'semifinals' },
+    { id: 'af-3rd', date: '2024-02-10T20:00Z', dateKey: '2024-02-10', dateTs: Date.parse('2024-02-10T20:00Z'), seasonSlug: '3rd-place-match' },
+    { id: 'af-fin', date: '2024-02-11T20:00Z', dateKey: '2024-02-11', dateTs: Date.parse('2024-02-11T20:00Z'), seasonSlug: 'final' }
+  ];
+  const organized = organizeHistoricalMatches(afconFixtures, 'caf.nations');
+  assert.equal(organized.mode, 'stages');
+  assert.deepEqual(organized.groups.map(g => g.id), [
+    'stage-group-stage',
+    'stage-r16',
+    'stage-qf',
+    'stage-sf',
+    'stage-third-place',
+    'stage-final'
+  ]);
+
+  // getTournamentKnockouts queries [year, year+1] for AFCON, filters season identity, and preserves AET/PEN + 3rd-place
+  const originalFetch = globalThis.fetch;
+  const fetchedUrls = [];
+  globalThis.fetch = async (url) => {
+    const str = String(url);
+    fetchedUrls.push(str);
+    if (str.includes('/summary?')) {
+      return { ok: true, json: async () => ({}) };
+    }
+    if (str.includes('dates=2024')) {
+      return {
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              id: 'afcon23-3rd',
+              season: { year: 2023, slug: '3rd-place-match' },
+              date: '2024-02-10T20:00Z',
+              status: { type: { state: 'post', completed: true, name: 'STATUS_FINAL_PEN', detail: 'FT-Pens' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '0', shootoutScore: '6', winner: true, team: { id: '467', displayName: 'South Africa' } },
+                  { homeAway: 'away', score: '0', shootoutScore: '5', winner: false, team: { id: '2847', displayName: 'DR Congo' } }
+                ]
+              }]
+            },
+            {
+              id: 'afcon23-final',
+              season: { year: 2023, slug: 'final' },
+              date: '2024-02-11T20:00Z',
+              status: { type: { state: 'post', completed: true, name: 'STATUS_FULL_TIME' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '1', winner: false, team: { id: '657', displayName: 'Nigeria' } },
+                  { homeAway: 'away', score: '2', winner: true, team: { id: '4789', displayName: 'Ivory Coast' } }
+                ]
+              }]
+            },
+            {
+              id: 'wrong-season-event',
+              season: { year: 2021, slug: 'final' },
+              date: '2022-02-06T19:00Z',
+              status: { type: { state: 'post', completed: true } },
+              competitions: [{ competitors: [] }]
+            }
+          ]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({ events: [] }) };
+  };
+
+  try {
+    const knockouts = await getTournamentKnockouts('caf.nations', 2023);
+    assert.ok(fetchedUrls.some(u => u.includes('dates=2023')));
+    assert.ok(fetchedUrls.some(u => u.includes('dates=2024')));
+    assert.equal(knockouts.thirdPlace.length, 1);
+    assert.equal(knockouts.thirdPlace[0].finishType, 'penalties');
+    assert.equal(knockouts.thirdPlace[0].homePenalties, 6);
+    assert.equal(knockouts.final.length, 1);
+    assert.equal(knockouts.final[0].awayWinner, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
