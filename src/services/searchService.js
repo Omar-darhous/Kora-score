@@ -394,6 +394,7 @@ const LEAGUE_ALIASES = {
   'egypt.1': ['الدوري المصري', 'الدوري المصري الممتاز', 'مصر', 'egyptian premier league', 'دوري نايل'],
   'uefa.champions': ['دوري ابطال اوروبا', 'تشامبيونز ليج', 'الشامبيونز ليج', 'ابطال اوروبا', 'champions league', 'ucl'],
   'uefa.europa': ['الدوري الاوروبي', 'اليوروباليج', 'europa league', 'uel'],
+  'uefa.europa.conf': ['دوري المؤتمر الأوروبي', 'دوري المؤتمر الاوروبي', 'دوري المؤتمر', 'كونفرنس ليج', 'conference league', 'uefa conference league', 'uecl'],
   'fifa.world': ['كاس العالم', 'المونديال', 'world cup', 'فيفا', 'كأس العالم'],
   'usa.1': ['الدوري الامريكي', 'ام ال اس', 'mls', 'امريكا']
 };

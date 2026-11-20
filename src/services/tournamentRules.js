@@ -1,6 +1,6 @@
-// UEFA 2024/25 onward: top 8 -> R16, 9-24 -> play-offs.
+// UEFA 2024/25 onward: top 8 -> R16, 9-24 -> play-offs (UCL/UEL: 8 games, UECL: 6 games).
 // FIFA 2026: top 2 in 12 groups plus 8 third-place teams -> R32.
-export const isTournament = id => ['fifa.world', 'uefa.champions', 'uefa.europa'].includes(id);
+export const isTournament = id => ['fifa.world', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf'].includes(id);
 export const rounds = [['playoff','ملحق الأدوار الإقصائية'],['r32','دور الـ 32'],['r16','دور الـ 16'],['qf','ربع النهائي'],['sf','نصف النهائي'],['thirdPlace','المركز الثالث'],['final','النهائي']];
 export function classifyRound(text = '') {
   const s = text.toLowerCase().replaceAll('-', ' ');
@@ -20,7 +20,8 @@ export function qualification(id, team, groups, bracket) {
   const year = Number(groups[0]?.season?.year);
   const entries = groups.flatMap(g => g.entries || []);
   if (id.startsWith('uefa.') && year >= 2024 && groups.length === 1 && entries.length === 36) {
-    const complete = entries.every(t => t.played >= 8);
+    const requiredGames = id === 'uefa.europa.conf' ? 6 : 8;
+    const complete = entries.every(t => t.played >= requiredGames);
     const prefix = complete ? 'تأهل إلى ' : 'مركز مؤهل إلى ';
     if (team.rank <= 8) return zone(prefix + 'دور الـ16');
     if (team.rank <= 24) return zone(prefix + 'الملحق الإقصائي', '#f59e0b');
@@ -41,7 +42,15 @@ export function qualification(id, team, groups, bracket) {
   // Historical group formats: do not apply a modern league-phase rule.
   if (id === 'fifa.world' && year >= 1998 && year <= 2022 && groups.length === 8 && team.rank <= 2)
     return zone('مركز مؤهل إلى دور الـ16');
-  if (id.startsWith('uefa.') && year < 2024 && groups.every(g => g.entries.length === 4) && team.rank <= 2)
+  if (id === 'uefa.europa.conf' && year >= 2021 && year < 2024 && groups.length === 8 && groups.every(g => g.entries.length === 4)) {
+    const group = groups.find(g => g.entries.some(t => t.teamId === team.teamId)) || groups[0];
+    const complete = group?.entries.every(t => t.played >= 6);
+    const prefix = complete ? 'تأهل إلى ' : 'مركز مؤهل إلى ';
+    if (team.rank === 1) return zone(prefix + 'دور الـ16');
+    if (team.rank === 2) return zone(prefix + 'الملحق الإقصائي', '#f59e0b');
+    return zone(complete ? 'خرج من دور المجموعات' : 'خارج مراكز التأهل حالياً', '#ef4444');
+  }
+  if (id.startsWith('uefa.') && id !== 'uefa.europa.conf' && year < 2024 && groups.every(g => g.entries.length === 4) && team.rank <= 2)
     return zone('مركز مؤهل إلى الدور التالي');
   return null;
 }
