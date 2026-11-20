@@ -1,13 +1,15 @@
 import { cachedJson } from './requestCache.js';
 import { parseMatchResult } from './matchResult.js';
-import { classifyRound, rounds } from './tournamentRules.js';
+import { classifyRound, rounds, isUefaClubTournament } from './tournamentRules.js';
 
 // جلب تفاصيل مباريات الأدوار الإقصائية لكأس العالم وترتيبها في هيكل الشجرة
 export const getTournamentKnockouts = async (leagueId, seasonYear) => {
   const year = Number(seasonYear);
   if (!Number.isInteger(year) || year < 1900) throw new Error('Season unavailable');
-  // European seasons and cross-year AFCON editions span two calendar years; never mix different seasons.
-  const years = leagueId.startsWith('uefa.') || leagueId === 'caf.nations' ? [year, year + 1] : [year];
+  // European club seasons, AFCON editions, and EURO 2020 (played in 2021) can span into year + 1.
+  const years = isUefaClubTournament(leagueId) || leagueId === 'uefa.euro' || leagueId === 'caf.nations'
+    ? [year, year + 1]
+    : [year];
   const pages = await Promise.all(years.map(async calendarYear => {
     return cachedJson(`https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/scoreboard?dates=${calendarYear}&limit=1000`, { ttl: 15000, timeout: 20000 });
   }));

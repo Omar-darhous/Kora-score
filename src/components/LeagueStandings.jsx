@@ -1,5 +1,5 @@
 import KnockoutBracket from './KnockoutBracket';
-import { isTournament, qualification } from '../services/tournamentRules';
+import { isTournament, isUefaClubTournament, qualification } from '../services/tournamentRules';
 import RequestState from './RequestState';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -489,7 +489,7 @@ const LeagueStandings = ({
 
       {isTournament(activeLeague) && <div className="glass-card request-state" role="note">
         <strong>{standingsGroups[0]?.season?.displayName || 'موسم البطولة'}</strong>
-        <p>{activeLeague === 'fifa.world' && Number(seasonYear) === 2026 ? 'يتأهل أول وثاني كل مجموعة وأفضل 8 ثوالث إلى دور الـ32. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ32 المنشورة.' : activeLeague === 'caf.nations' && Number(seasonYear) >= 2019 ? 'يتأهل أول وثاني كل مجموعة وأفضل 4 ثوالث إلى دور الـ16. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ16 المنشورة.' : activeLeague.startsWith('uefa.') && Number(seasonYear) >= 2024 ? 'المراكز 1–8 إلى دور الـ16، والمراكز 9–24 إلى الملحق. المراكز الحالية لا تعني ضمان التأهل قبل اكتمال مرحلة الدوري.' : 'تُعرض قواعد التأهل وفق موسم البطولة المتاح.'}</p>
+        <p>{activeLeague === 'fifa.world' && Number(seasonYear) === 2026 ? 'يتأهل أول وثاني كل مجموعة وأفضل 8 ثوالث إلى دور الـ32. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ32 المنشورة.' : (activeLeague === 'caf.nations' && Number(seasonYear) >= 2019) || (activeLeague === 'uefa.euro' && Number(seasonYear) >= 2016) ? 'يتأهل أول وثاني كل مجموعة وأفضل 4 ثوالث إلى دور الـ16. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ16 المنشورة.' : isUefaClubTournament(activeLeague) && Number(seasonYear) >= 2024 ? 'المراكز 1–8 إلى دور الـ16، والمراكز 9–24 إلى الملحق. المراكز الحالية لا تعني ضمان التأهل قبل اكتمال مرحلة الدوري.' : 'تُعرض قواعد التأهل وفق موسم البطولة المتاح.'}</p>
         {knockoutError && subTab === 'groups' && <button type="button" className="tab-btn" onClick={() => setKnockoutRetry(n => n + 1)}>تعذر التحقق من المتأهلين — إعادة المحاولة</button>}
       </div>}
       {suppressDomesticZones && standingsGroups.length > 0 && (

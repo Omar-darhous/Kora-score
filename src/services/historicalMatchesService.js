@@ -1,6 +1,7 @@
 import { cachedJson } from './requestCache.js';
 import { normalizeScoreboardMatches } from './matchesService.js';
 import { getLeagues } from './logoUtils.js';
+import { isTournament } from './tournamentRules.js';
 
 const SINGLE_CALENDAR_YEAR_LEAGUES = new Set(['fifa.world', 'usa.1']);
 
@@ -262,11 +263,7 @@ export const organizeHistoricalMatches = (matches = [], leagueId = '') => {
   }
 
   const validMatches = matches.filter(Boolean);
-  const isTournamentCompetition =
-    leagueId.startsWith('uefa.') ||
-    leagueId === 'fifa.world' ||
-    leagueId === 'caf.nations' ||
-    leagueId === 'usa.1';
+  const isTournamentCompetition = isTournament(leagueId) || leagueId === 'usa.1';
 
   // 1. Stage-based organization for multi-stage competitions (UCL, UEL, World Cup, MLS)
   const stageMap = new Map();

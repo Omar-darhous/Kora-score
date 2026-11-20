@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isTournament, isNationalTournament, classifyRound, qualification } from '../src/services/tournamentRules.js';
+import { isTournament, isNationalTournament, isUefaClubTournament, classifyRound, qualification } from '../src/services/tournamentRules.js';
 import { getTournamentKnockouts, getLeagues, resolveLeagueLogo, resolveTeamLogo, DEFAULT_TEAM_LOGO } from '../src/services/footballService.js';
 import { getQuickSuggestions, searchAll } from '../src/services/searchService.js';
 import { getSeasonCalendarYears, organizeHistoricalMatches } from '../src/services/historicalMatchesService.js';
@@ -57,6 +57,7 @@ test('league and team logo URLs use verified ESPN leaguelogos/teamlogos paths, e
     'uefa.europa.conf': '20296',
     'fifa.world': '4',
     'caf.nations': '76',
+    'uefa.euro': '74',
     'usa.1': '19'
   };
 
@@ -333,6 +334,144 @@ test('AFCON (caf.nations) registration, search, 24-team best-4-thirds rules, old
     assert.equal(knockouts.thirdPlace[0].homePenalties, 6);
     assert.equal(knockouts.final.length, 1);
     assert.equal(knockouts.final[0].awayWinner, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('EURO (uefa.euro) registration, UEFA club separation, 24-team and 16-team formats, EURO 2020 in 2021, and no third-place match', async () => {
+  const leagues = getLeagues();
+  const euro = leagues.find(l => l.id === 'uefa.euro');
+  assert.ok(euro, 'uefa.euro must be registered in getLeagues()');
+  assert.equal(euro.name, 'كأس أمم أوروبا');
+  assert.equal(euro.logo, 'https://a.espncdn.com/i/leaguelogos/soccer/500/74.png');
+
+  // Strict separation between UEFA national tournament and UEFA club tournaments
+  assert.equal(isTournament('uefa.euro'), true);
+  assert.equal(isNationalTournament('uefa.euro'), true);
+  assert.equal(isUefaClubTournament('uefa.euro'), false);
+  assert.equal(isUefaClubTournament('uefa.champions'), true);
+  assert.equal(isUefaClubTournament('uefa.europa'), true);
+  assert.equal(isUefaClubTournament('uefa.europa.conf'), true);
+
+  // Arabic & English search aliases
+  for (const query of ['كأس أمم أوروبا', 'كأس الامم الاوروبية', 'أمم أوروبا', 'يورو', 'EURO', 'UEFA EURO', 'European Championship']) {
+    const res = searchAll({ query, leagues, matches: [] });
+    assert.equal(res.leagues.some(l => l.id === 'uefa.euro'), true, `search query "${query}" must match uefa.euro`);
+  }
+
+  // Modern 24-team EURO format (2016, 2020, 2024): 6 groups x 4 teams
+  const buildEuroGroups = (year, played = 3) =>
+    Array.from({ length: 6 }, (_, g) => ({
+      name: `Group ${String.fromCharCode(65 + g)}`,
+      season: { year },
+      entries: Array.from({ length: 4 }, (_, r) => ({
+        teamId: `eu-g${g}-r${r + 1}`,
+        rank: r + 1,
+        played
+      }))
+    }));
+
+  const groups2024 = buildEuroGroups(2024, 3);
+  const r16Teams = [
+    ...groups2024.flatMap(g => [g.entries[0].teamId, g.entries[1].teamId]),
+    'eu-g1-r3', 'eu-g2-r3', 'eu-g3-r3', 'eu-g4-r3'
+  ];
+  const r16Bracket = {
+    r16: Array.from({ length: 8 }, (_, i) => ({
+      homeTeamId: r16Teams[i * 2],
+      awayTeamId: r16Teams[i * 2 + 1]
+    }))
+  };
+
+  assert.equal(qualification('uefa.euro', groups2024[0].entries[0], groups2024, r16Bracket)?.label, 'تأهل إلى دور الـ16');
+  assert.equal(qualification('uefa.euro', groups2024[0].entries[1], groups2024, r16Bracket)?.label, 'تأهل إلى دور الـ16');
+  assert.equal(qualification('uefa.euro', groups2024[0].entries[3], groups2024, r16Bracket)?.label, 'خرج من دور المجموعات');
+
+  // Exactly 4 qualified third-placed teams and 2 eliminated
+  const thirdLabels = groups2024.map(g => qualification('uefa.euro', g.entries[2], groups2024, r16Bracket)?.label);
+  assert.equal(thirdLabels.filter(l => l === 'تأهل ضمن أفضل 4 ثوالث').length, 4);
+  assert.equal(thirdLabels.filter(l => l === 'لم يتأهل ضمن أفضل الثوالث').length, 2);
+
+  // Older 16-team EURO format (2004, 2008, 2012): 4 groups x 4 -> top 2 to Quarterfinals, no best-thirds
+  const groups2012 = Array.from({ length: 4 }, (_, g) => ({
+    name: `Group ${String.fromCharCode(65 + g)}`,
+    season: { year: 2012 },
+    entries: Array.from({ length: 4 }, (_, r) => ({ teamId: `eu12-${g}-${r}`, rank: r + 1, played: 3 }))
+  }));
+  assert.equal(qualification('uefa.euro', groups2012[0].entries[0], groups2012, null)?.label, 'تأهل إلى ربع النهائي');
+  assert.equal(qualification('uefa.euro', groups2012[0].entries[1], groups2012, null)?.label, 'تأهل إلى ربع النهائي');
+  assert.equal(qualification('uefa.euro', groups2012[0].entries[2], groups2012, null)?.label, 'خرج من دور المجموعات');
+
+  // EURO 2020 spans into calendar year 2021; stage ordering has NO third-place match
+  assert.deepEqual(getSeasonCalendarYears('uefa.euro', 2020), [2020, 2021]);
+  assert.deepEqual(getSeasonCalendarYears('uefa.euro', 2024), [2024, 2025]);
+
+  const euro2024Fixtures = [
+    { id: 'e24-gs', date: '2024-06-14T19:00Z', dateKey: '2024-06-14', dateTs: Date.parse('2024-06-14T19:00Z'), seasonSlug: 'group-stage' },
+    { id: 'e24-r16', date: '2024-06-29T16:00Z', dateKey: '2024-06-29', dateTs: Date.parse('2024-06-29T16:00Z'), seasonSlug: 'round-of-16' },
+    { id: 'e24-qf', date: '2024-07-05T16:00Z', dateKey: '2024-07-05', dateTs: Date.parse('2024-07-05T16:00Z'), seasonSlug: 'quarterfinals' },
+    { id: 'e24-sf', date: '2024-07-09T19:00Z', dateKey: '2024-07-09', dateTs: Date.parse('2024-07-09T19:00Z'), seasonSlug: 'semifinals' },
+    { id: 'e24-fin', date: '2024-07-14T19:00Z', dateKey: '2024-07-14', dateTs: Date.parse('2024-07-14T19:00Z'), seasonSlug: 'final' }
+  ];
+  const organized = organizeHistoricalMatches(euro2024Fixtures, 'uefa.euro');
+  assert.equal(organized.mode, 'stages');
+  assert.deepEqual(organized.groups.map(g => g.id), [
+    'stage-group-stage',
+    'stage-r16',
+    'stage-qf',
+    'stage-sf',
+    'stage-final'
+  ]);
+  assert.equal(organized.groups.some(g => g.id === 'stage-third-place'), false);
+
+  // getTournamentKnockouts retrieves EURO 2020 (played in 2021), preserves PEN/AET, filters wrong season, and keeps thirdPlace empty
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    const str = String(url);
+    urls.push(str);
+    if (str.includes('/summary?')) return { ok: true, json: async () => ({}) };
+    if (str.includes('dates=2021')) {
+      return {
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              id: 'euro2020-final',
+              season: { year: 2020, slug: 'final' },
+              date: '2021-07-11T19:00Z',
+              status: { type: { state: 'post', completed: true, name: 'STATUS_FINAL_PEN', detail: 'FT-Pens' } },
+              competitions: [{
+                competitors: [
+                  { homeAway: 'home', score: '1', shootoutScore: '3', winner: true, team: { id: '162', displayName: 'Italy' } },
+                  { homeAway: 'away', score: '1', shootoutScore: '2', winner: false, team: { id: '448', displayName: 'England' } }
+                ]
+              }]
+            },
+            {
+              id: 'euro2024-wrong-season',
+              season: { year: 2024, slug: 'final' },
+              date: '2024-07-14T19:00Z',
+              status: { type: { state: 'post', completed: true } },
+              competitions: [{ competitors: [] }]
+            }
+          ]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({ events: [] }) };
+  };
+
+  try {
+    const knockouts2020 = await getTournamentKnockouts('uefa.euro', 2020);
+    assert.ok(urls.some(u => u.includes('dates=2020')));
+    assert.ok(urls.some(u => u.includes('dates=2021')));
+    assert.equal(knockouts2020.thirdPlace.length, 0);
+    assert.equal(knockouts2020.final.length, 1);
+    assert.equal(knockouts2020.final[0].finishType, 'penalties');
+    assert.equal(knockouts2020.final[0].homePenalties, 3);
+    assert.equal(knockouts2020.final[0].homeWinner, true);
   } finally {
     globalThis.fetch = originalFetch;
   }
