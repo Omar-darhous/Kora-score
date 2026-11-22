@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Radio, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
+import { getLiveMatchDisplay } from '../services/matchResult';
 
 const LiveMatches = ({ matches, onMatchClick, loading, error }) => {
   const scrollContainerRef = useRef(null);
@@ -88,7 +89,9 @@ const LiveMatches = ({ matches, onMatchClick, loading, error }) => {
       <div className="live-matches-wrapper">
         <div className="live-matches-scroll" ref={scrollContainerRef}>
           <AnimatePresence>
-            {liveMatches.map((match) => (
+            {liveMatches.map((match) => {
+              const liveDisplay = getLiveMatchDisplay(match);
+              return (
               <motion.div
                 key={match.id}
                 className="match-ticker-card"
@@ -117,9 +120,9 @@ const LiveMatches = ({ matches, onMatchClick, loading, error }) => {
                     )}
                     <span>{match.leagueName}</span>
                   </div>
-                  <span className="live-badge">
-                    <span className="live-dot" />
-                    <span><bdi>{String(match.minute ?? '').replace(/['"’`]/g, '').trim()}</bdi> د</span>
+                  <span className={`live-badge ${liveDisplay.isHalfTime ? 'is-halftime' : ''}`}>
+                    {liveDisplay.isRunningClock && <span className="live-dot" />}
+                    <span><bdi>{liveDisplay.shortBadge}</bdi></span>
                   </span>
                 </div>
 
@@ -162,11 +165,14 @@ const LiveMatches = ({ matches, onMatchClick, loading, error }) => {
 
                 {/* Footer */}
                 <div className="ticker-footer">
-                  <span className="match-status">جارية الآن {match.roundName ? `• ${match.roundName}` : ''}</span>
+                  <span className={`match-status ${liveDisplay.isHalfTime ? 'is-halftime' : ''}`}>
+                    {liveDisplay.statusLabel} {match.roundName ? `• ${match.roundName}` : ''}
+                  </span>
                   <span className="match-time">انطلقت {match.time}</span>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </AnimatePresence>
         </div>
       </div>

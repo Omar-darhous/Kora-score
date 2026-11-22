@@ -1,10 +1,12 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Sun, Moon, Settings, Trophy, Calendar, Radio, Newspaper, Search, Star } from 'lucide-react';
+import { Sun, Moon, Settings, Trophy, Calendar, Radio, Newspaper, Search, Star, Bell, BellRing } from 'lucide-react';
 import { useFavorites } from '../context/FavoritesContext';
+import { useNotifications } from '../context/NotificationsContext';
 
 const Header = ({ theme, toggleTheme, onOpenSettings, onOpenSearch }) => {
   const { totalFavoritesCount } = useFavorites();
+  const { isNotificationsActive, openNotificationSettings } = useNotifications();
 
   const menuItems = [
     { id: 'live', path: '/', label: 'المباشر واليوم', icon: Radio, end: true },
@@ -90,6 +92,17 @@ const Header = ({ theme, toggleTheme, onOpenSettings, onOpenSearch }) => {
             aria-label="البحث السريع"
           >
             <Search size={18} />
+          </button>
+
+          <button
+            type="button"
+            className={`action-btn notif-header-btn ${isNotificationsActive ? 'is-active' : ''}`}
+            onClick={openNotificationSettings}
+            title={isNotificationsActive ? 'إشعارات الأندية المفضلة مفعّلة' : 'إعدادات إشعارات الأندية المفضلة'}
+            aria-label="إعدادات إشعارات الأندية المفضلة"
+          >
+            {isNotificationsActive ? <BellRing size={18} /> : <Bell size={18} />}
+            {isNotificationsActive && <span className="notif-active-dot" aria-hidden="true" />}
           </button>
 
           <button

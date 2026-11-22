@@ -1,4 +1,4 @@
-import { finishedMatchLabel, isUnplayedMatchStatus, getMatchStatusLabel } from '../services/matchResult';
+import { finishedMatchLabel, isUnplayedMatchStatus, getMatchStatusLabel, getLiveMatchDisplay } from '../services/matchResult';
 import { COMPETITION_CATEGORIES, organizeCompetitions } from '../services/tournamentRules';
 import { matchesCompetitionFilter } from '../services/searchService';
 import RequestState from './RequestState';
@@ -443,12 +443,15 @@ const MatchSchedule = ({
                           )}
                         </div>
 
-                        {match.status === 'LIVE' && (
-                          <span className="match-status-tag live">
-                            <span className="live-dot" />
-                            <span><bdi>{String(match.minute ?? '').replace(/['"’`]/g, '').trim()}</bdi> د</span>
-                          </span>
-                        )}
+                        {match.status === 'LIVE' && (() => {
+                          const liveDisplay = getLiveMatchDisplay(match);
+                          return (
+                            <span className={`match-status-tag ${liveDisplay.isHalfTime ? 'ht' : 'live'}`}>
+                              {liveDisplay.isRunningClock && <span className="live-dot" />}
+                              <span><bdi>{liveDisplay.badgeText}</bdi></span>
+                            </span>
+                          );
+                        })()}
                         {match.status === 'FT' && (
                           <span className="match-status-tag ft">
                             {finishedMatchLabel(match)}

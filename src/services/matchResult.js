@@ -6,6 +6,23 @@ const numberOrNull = value => {
 
 const UNPLAYED_STATUS_CODES = new Set(['NS', 'UPCOMING', 'POSTPONED', 'CANCELLED', 'ABANDONED', 'SUSPENDED']);
 
+export const MATCH_PHASES = Object.freeze({
+  SCHEDULED: 'SCHEDULED',
+  FIRST_HALF: 'FIRST_HALF',
+  HALFTIME: 'HALFTIME',
+  SECOND_HALF: 'SECOND_HALF',
+  EXTRA_TIME_FIRST_HALF: 'EXTRA_TIME_FIRST_HALF',
+  EXTRA_TIME_HALFTIME: 'EXTRA_TIME_HALFTIME',
+  EXTRA_TIME_SECOND_HALF: 'EXTRA_TIME_SECOND_HALF',
+  EXTRA_TIME: 'EXTRA_TIME',
+  PENALTIES: 'PENALTIES',
+  FULL_TIME: 'FULL_TIME',
+  POSTPONED: 'POSTPONED',
+  CANCELLED: 'CANCELLED',
+  ABANDONED: 'ABANDONED',
+  SUSPENDED: 'SUSPENDED'
+});
+
 /**
  * Normalizes ESPN match status objects/types safely.
  * Explicit postponed/cancelled/abandoned/suspended statuses or completed === false
@@ -26,6 +43,169 @@ export function resolveEspnMatchStatus(statusOrType) {
   if (type.completed === false) return 'NS';
   if (type.completed === true || type.state === 'post') return 'FT';
   return 'NS';
+}
+
+/**
+ * Resolves the verified live/terminal match phase strictly from ESPN status metadata.
+ * NEVER infers half-time solely from stoppage minutes like 45+4.
+ */
+export function resolveEspnMatchPhase(statusOrType) {
+  const normalizedStatus = resolveEspnMatchStatus(statusOrType);
+  if (normalizedStatus === 'POSTPONED') return MATCH_PHASES.POSTPONED;
+  if (normalizedStatus === 'CANCELLED') return MATCH_PHASES.CANCELLED;
+  if (normalizedStatus === 'ABANDONED') return MATCH_PHASES.ABANDONED;
+  if (normalizedStatus === 'SUSPENDED') return MATCH_PHASES.SUSPENDED;
+  if (normalizedStatus === 'FT') return MATCH_PHASES.FULL_TIME;
+  if (normalizedStatus === 'NS') return MATCH_PHASES.SCHEDULED;
+
+  const type = statusOrType?.type || statusOrType || {};
+  const name = String(type.name || '').toUpperCase().trim();
+  const detailText = [type.description, type.detail, type.shortDetail, statusOrType?.displayClock]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const period = Number(statusOrType?.period);
+
+  // 1. Penalty shootout in progress
+  if (
+    /SHOOTOUT|PENALT/i.test(name) ||
+    /\b(?:shoot[\s-]*out|penalties|pens)\b/i.test(detailText)
+  ) {
+    return MATCH_PHASES.PENALTIES;
+  }
+
+  // 2. Half-time in extra time
+  if (
+    /HALFTIME_ET|OVERTIME_HALFTIME|EXTRA_TIME_HALFTIME/i.test(name) ||
+    (/\b(?:half[\s-]*time|ht)\b/i.test(detailText) && (/\b(?:et|aet|extra|overtime)\b/i.test(detailText) || period >= 3))
+  ) {
+    return MATCH_PHASES.EXTRA_TIME_HALFTIME;
+  }
+
+  // 3. Verified Half-Time (HT) — requires explicit ESPN halftime status/marker, NEVER inferred from 45+4
+  if (
+    name === 'STATUS_HALFTIME' ||
+    /HALFTIME/i.test(name) ||
+    /\bhalf[\s-]*time\b/i.test(detailText) ||
+    /^ht$/i.test(String(type.detail || '').trim()) ||
+    /^ht$/i.test(String(type.shortDetail || '').trim()) ||
+    /^ht$/i.test(String(statusOrType?.displayClock || '').trim())
+  ) {
+    return MATCH_PHASES.HALFTIME;
+  }
+
+  // 4. Extra Time halves
+  if (
+    /FIRST_HALF_EXTRA_TIME|OVERTIME_FIRST|ET_1ST/i.test(name) ||
+    (/\b(?:1st|first)\b/i.test(detailText) && /\b(?:extra|overtime|et)\b/i.test(detailText))
+  ) {
+    return MATCH_PHASES.EXTRA_TIME_FIRST_HALF;
+  }
+  if (
+    /SECOND_HALF_EXTRA_TIME|OVERTIME_SECOND|ET_2ND/i.test(name) ||
+    (/\b(?:2nd|second)\b/i.test(detailText) && /\b(?:extra|overtime|et)\b/i.test(detailText))
+  ) {
+    return MATCH_PHASES.EXTRA_TIME_SECOND_HALF;
+  }
+  if (
+    /OVERTIME|EXTRA_TIME/i.test(name) ||
+    /\b(?:extra[\s-]*time|overtime)\b/i.test(detailText) ||
+    period === 3 ||
+    period === 4
+  ) {
+    return MATCH_PHASES.EXTRA_TIME;
+  }
+
+  // 5. Second Half
+  if (
+    name === 'STATUS_SECOND_HALF' ||
+    /SECOND_HALF/i.test(name) ||
+    /\b(?:2nd|second)\s+half\b/i.test(detailText) ||
+    period === 2
+  ) {
+    return MATCH_PHASES.SECOND_HALF;
+  }
+
+  // 6. First Half
+  if (
+    name === 'STATUS_FIRST_HALF' ||
+    /FIRST_HALF/i.test(name) ||
+    /\b(?:1st|first)\s+half\b/i.test(detailText) ||
+    period === 1
+  ) {
+    return MATCH_PHASES.FIRST_HALF;
+  }
+
+  return MATCH_PHASES.FIRST_HALF;
+}
+
+export function isHalfTimePhase(match = {}) {
+  if (!match || match.status !== 'LIVE') return false;
+  if (match.matchPhase === MATCH_PHASES.HALFTIME || match.matchPhase === MATCH_PHASES.EXTRA_TIME_HALFTIME) {
+    return true;
+  }
+  if (match.isHalfTime === true) return true;
+  const detail = String(match.statusDetail || '').trim();
+  const minute = String(match.minute || '').trim();
+  return /\bhalf[\s-]*time\b|^ht$/i.test(detail) || /^ht$/i.test(minute);
+}
+
+export function getLiveMatchDisplay(match = {}) {
+  const cleanMinute = String(match?.minute ?? '').replace(/['"’`\u2032]/g, '').trim();
+  const phase = match?.matchPhase || (isHalfTimePhase(match) ? MATCH_PHASES.HALFTIME : null);
+
+  if (phase === MATCH_PHASES.EXTRA_TIME_HALFTIME) {
+    return {
+      phase,
+      isHalfTime: true,
+      isRunningClock: false,
+      shortBadge: 'HT الإضافي',
+      badgeText: 'استراحة الوقت الإضافي',
+      modalLabel: 'استراحة الوقت الإضافي (HT)',
+      statusLabel: 'استراحة الوقت الإضافي'
+    };
+  }
+
+  if (phase === MATCH_PHASES.HALFTIME || isHalfTimePhase(match)) {
+    return {
+      phase: MATCH_PHASES.HALFTIME,
+      isHalfTime: true,
+      isRunningClock: false,
+      shortBadge: 'HT',
+      badgeText: 'استراحة بين الشوطين',
+      modalLabel: 'استراحة بين الشوطين (HT)',
+      statusLabel: 'استراحة بين الشوطين'
+    };
+  }
+
+  if (phase === MATCH_PHASES.PENALTIES) {
+    return {
+      phase,
+      isHalfTime: false,
+      isRunningClock: false,
+      shortBadge: 'ركلات الترجيح',
+      badgeText: 'ركلات الترجيح',
+      modalLabel: 'ركلات الترجيح',
+      statusLabel: 'ركلات الترجيح جارية'
+    };
+  }
+
+  const isExtraTime =
+    phase === MATCH_PHASES.EXTRA_TIME ||
+    phase === MATCH_PHASES.EXTRA_TIME_FIRST_HALF ||
+    phase === MATCH_PHASES.EXTRA_TIME_SECOND_HALF;
+
+  const clockLabel = cleanMinute ? `${cleanMinute} د` : 'مباشر';
+  return {
+    phase: phase || MATCH_PHASES.FIRST_HALF,
+    isHalfTime: false,
+    isRunningClock: true,
+    cleanMinute,
+    shortBadge: clockLabel,
+    badgeText: clockLabel,
+    modalLabel: cleanMinute ? `مباشر (${cleanMinute} د)` : 'مباشر',
+    statusLabel: isExtraTime ? 'الوقت الإضافي' : 'جارية الآن'
+  };
 }
 
 export function isUnplayedMatchStatus(status) {
@@ -221,12 +401,15 @@ export function getFavoriteMatchDisplay(match = {}) {
   const isFinished = ['FT', 'FINISHED'].includes(match.status);
   let statusLabel = 'لم تبدأ';
   if (isEgyMatch) {
-    if (isLive) statusLabel = 'جارية (تجريبية)';
+    if (isLive) statusLabel = isHalfTimePhase(match) ? 'استراحة بين الشوطين (تجريبية)' : 'جارية (تجريبية)';
     else if (isFinished) statusLabel = finishedMatchLabel(match) + ' (تجريبية)';
     else if (isUnplayed && !isUpcoming) statusLabel = getMatchStatusLabel(match) + ' (تجريبية)';
     else statusLabel = match.time || 'مجدولة (تجريبية)';
   } else {
-    if (isLive) statusLabel = `مباشر • ${match.minute || ''}`;
+    if (isLive) {
+      const liveDisplay = getLiveMatchDisplay(match);
+      statusLabel = liveDisplay.isHalfTime ? `${liveDisplay.badgeText} (HT)` : `مباشر • ${match.minute || ''}`;
+    }
     else if (isFinished) statusLabel = finishedMatchLabel(match);
     else if (isUnplayed && !isUpcoming) statusLabel = getMatchStatusLabel(match);
     else statusLabel = match.time || 'قادمة';

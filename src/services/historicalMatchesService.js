@@ -1,5 +1,5 @@
 import { cachedJson } from './requestCache.js';
-import { normalizeScoreboardMatches } from './matchesService.js';
+import { normalizeScoreboardMatches, extractReliableRoundNumber } from './matchesService.js';
 import { getLeagues } from './logoUtils.js';
 import { isTournament } from './tournamentRules.js';
 
@@ -37,25 +37,6 @@ export const formatArabicMatchDate = (isoDate) => {
   } catch {
     return isoDate.slice(0, 10);
   }
-};
-
-const extractReliableRoundNumber = (rawEvent) => {
-  const weekNum = rawEvent?.week?.number ?? rawEvent?.week;
-  if (Number.isInteger(Number(weekNum)) && Number(weekNum) > 0) {
-    return Number(weekNum);
-  }
-  const comp = rawEvent?.competitions?.[0];
-  const compRound = comp?.round?.number ?? rawEvent?.round?.number;
-  if (Number.isInteger(Number(compRound)) && Number(compRound) > 0) {
-    return Number(compRound);
-  }
-  const noteText = (comp?.notes || []).map(n => n?.text || '').join(' ');
-  const noteMatch = noteText.match(/\b(?:matchday|round|week|jornada|giornata)\s+(\d{1,2})\b/i);
-  if (noteMatch) {
-    const parsed = Number(noteMatch[1]);
-    if (Number.isInteger(parsed) && parsed > 0) return parsed;
-  }
-  return null;
 };
 
 export const formatArabicMonthLabel = (monthKey) => {
@@ -143,7 +124,7 @@ export const getHistoricalSeasonMatches = async (
           dateTs: Number.isFinite(dateTs) ? dateTs : 0,
           seasonYear: year,
           seasonSlug: rawEvent?.season?.slug || '',
-          roundNumber: extractReliableRoundNumber(rawEvent)
+          roundNumber: item.roundNumber ?? extractReliableRoundNumber(rawEvent, { leagueId: league.id })
         });
       }
     }

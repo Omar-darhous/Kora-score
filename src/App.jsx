@@ -8,6 +8,7 @@ import Header from './components/Header';
 import PageBoundary from './components/PageBoundary';
 const MatchModalRoute = lazy(() => import('./components/MatchModalRoute'));
 import ApiSettingsModal from './components/ApiSettingsModal';
+import NotificationSettingsModal from './components/NotificationSettingsModal';
 import SearchModal from './components/SearchModal';
 
 // استيراد صفحات المسارات
@@ -21,9 +22,21 @@ const TeamPage = lazy(() => import('./pages/TeamPage'));
 const FavoritesPage = lazy(() => import('./pages/FavoritesPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
-// استيراد سياق المفضلة والخدمات
+// استيراد سياق المفضلة والإشعارات والخدمات
 import { FavoritesProvider } from './context/FavoritesContext';
+import { NotificationsProvider, useNotifications } from './context/NotificationsContext';
 import { getMatches, getLeagues, subscribeToLiveMatches } from './services/footballService';
+
+const NotificationModalHost = () => {
+  const { isModalOpen, closeNotificationSettings } = useNotifications();
+  return (
+    <AnimatePresence>
+      {isModalOpen && (
+        <NotificationSettingsModal onClose={closeNotificationSettings} />
+      )}
+    </AnimatePresence>
+  );
+};
 
 // مساعدة للحصول على تاريخ اليوم منسق كـ YYYYMMDD
 const getTodayDateStr = () => {
@@ -44,6 +57,8 @@ function App() {
   });
 
   const [matches, setMatches] = useState([]);
+  const [liveTodayMatches, setLiveTodayMatches] = useState([]);
+  const [liveTodayLoaded, setLiveTodayLoaded] = useState(false);
   const [matchesLoading, setMatchesLoading] = useState(true);
   const [matchesError, setMatchesError] = useState(null);
   const [matchesWarning, setMatchesWarning] = useState(false);
@@ -91,7 +106,13 @@ function App() {
     const loadMatches = async () => {
       try {
         const data = await getMatches(selectedDateStr, { strict: true, forceRefresh: matchesRetry > 0, onPartial: () => { if (active) setMatchesWarning(true); } });
-        if (active) setMatches(data);
+        if (active) {
+          setMatches(data);
+          if (selectedDateStr === getTodayDateStr()) {
+            setLiveTodayMatches(data);
+            setLiveTodayLoaded(true);
+          }
+        }
       } catch (e) {
         console.error('Failed to load matches for date:', e);
         if (active) setMatchesError('تعذر تحميل جدول المباريات بالكامل. تحقق من الاتصال وأعد المحاولة.');
@@ -106,6 +127,8 @@ function App() {
   // الاشتراك في تحديثات المباريات المباشرة الحقيقية للـ "اليوم"
   useEffect(() => {
     const unsubscribe = subscribeToLiveMatches((updatedMatches) => {
+      setLiveTodayMatches(updatedMatches);
+      setLiveTodayLoaded(true);
       const todayStr = getTodayDateStr();
       setSelectedDateStr(prevDate => {
         if (prevDate === todayStr) {
@@ -180,6 +203,11 @@ function App() {
 
   return (
     <FavoritesProvider onNotify={triggerFeedback}>
+      <NotificationsProvider
+        liveMatches={liveTodayMatches}
+        matchesLoaded={liveTodayLoaded}
+        onFeedback={triggerFeedback}
+      >
       <div className="app-container">
       {/* إشعار هدف مباشر بنمط البث التلفزيوني الرياضي */}
       <AnimatePresence>
@@ -385,6 +413,9 @@ function App() {
         onMatchClick={handleMatchClick}
       />
 
+      {/* نافذة إعدادات إشعارات الأندية المفضلة */}
+      <NotificationModalHost />
+
       {/* نافذة إعدادات الـ API */}
       <AnimatePresence>
         {showSettings && (
@@ -431,6 +462,7 @@ function App() {
         )}
       </AnimatePresence>
       </div>
+      </NotificationsProvider>
     </FavoritesProvider>
   );
 }

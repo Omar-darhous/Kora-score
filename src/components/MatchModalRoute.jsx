@@ -9,31 +9,42 @@ const MatchModalRoute = ({ matches = [], onClose }) => {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // استخراج بيانات المباراة الأساسية من حالة التوجيه أو من قائمة المباريات المحملة
-  const match = location.state?.match || matches.find(m => String(m.id) === String(matchId));
+  // دمج آخر نسخة حية من قائمة المباريات فوق اللقطة الأولية حتى تتحدث حالة المباراة والنتيجة فورياً أثناء فتح النافذة
+  const liveMatch = matches.find(m => String(m.id) === String(matchId));
+  const match = liveMatch
+    ? { ...(location.state?.match || {}), ...liveMatch }
+    : location.state?.match;
 
   useEffect(() => {
     let isMounted = true;
-    const loadDetails = async () => {
+    const loadDetails = async ({ forceRefresh = false } = {}) => {
       if (!leagueId || !matchId) return;
-      setLoading(true);
+      if (!forceRefresh) setLoading(true);
       try {
-        const data = await getMatchDetails(leagueId, matchId);
+        const data = await getMatchDetails(leagueId, matchId, { forceRefresh });
         if (isMounted) {
           setDetails(data);
         }
       } catch (err) {
         console.error('Failed to fetch modal match details:', err);
       } finally {
-        if (isMounted) {
+        if (isMounted && !forceRefresh) {
           setLoading(false);
         }
       }
     };
 
     loadDetails();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadDetails({ forceRefresh: true });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [leagueId, matchId]);
 

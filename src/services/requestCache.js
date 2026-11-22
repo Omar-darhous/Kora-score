@@ -93,7 +93,10 @@ export function createRequestCache({
     entry.promise = (async () => {
       const timer = setTimeout(() => controller.abort(), timeout);
       try {
-        const response = await fetcher(key, { signal: controller.signal });
+        const fetchOptions = forceRefresh
+          ? { signal: controller.signal, cache: 'no-store' }
+          : { signal: controller.signal };
+        const response = await fetcher(key, fetchOptions);
         if (!response.ok) throw new Error('Request failed: ' + response.status);
         const data = await parseResponse(response);
         if (controller.signal.aborted) throw createAbortError();

@@ -11,9 +11,12 @@ import {
   Trash2,
   ChevronLeft,
   Sparkles,
-  Clock
+  Clock,
+  Bell,
+  BellRing
 } from 'lucide-react';
 import { useFavorites } from '../context/FavoritesContext';
+import { useNotifications } from '../context/NotificationsContext';
 import { getFavoriteMatchesFromLoaded } from '../services/favoritesService';
 import { POPULAR_TEAMS } from '../services/searchService';
 import { COMPETITION_CATEGORIES, organizeCompetitions } from '../services/tournamentRules';
@@ -28,6 +31,7 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick, matchesLoadin
     totalFavoritesCount,
     clearAllFavorites
   } = useFavorites();
+  const { isNotificationsActive, openNotificationSettings } = useNotifications();
 
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'teams' | 'leagues' | 'matches'
   const [discoveryCategory, setDiscoveryCategory] = useState('all'); // 'all' | 'club' | 'national'
@@ -157,6 +161,16 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick, matchesLoadin
             <span>مباريات بالجدول الحالي:</span>
             <strong>{favoriteMatches.length}</strong>
           </div>
+
+          <button
+            type="button"
+            onClick={openNotificationSettings}
+            className={`fav-notif-trigger-btn ${isNotificationsActive ? 'is-active' : ''}`}
+            title="ضبط إشعارات الأندية المفضلة المباشرة"
+          >
+            {isNotificationsActive ? <BellRing size={14} /> : <Bell size={14} />}
+            <span>{isNotificationsActive ? 'الإشعارات مفعّلة' : 'تفعيل إشعارات الأندية'}</span>
+          </button>
 
           {totalFavoritesCount > 0 && (
             <button

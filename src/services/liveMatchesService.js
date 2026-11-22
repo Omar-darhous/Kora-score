@@ -95,6 +95,8 @@ let clearLiveRefreshInterval = clearInterval;
 let subscribers = [];
 let lastNotifiedSignature = null;
 let isLivePolling = false;
+let lastPollCompletedAt = 0;
+let activeVisibilityCleanup = null;
 
 export const subscribeToLiveMatches = (
   callback,
@@ -102,7 +104,11 @@ export const subscribeToLiveMatches = (
     intervalMs = 30000,
     dateStr: fixedDateStr,
     setIntervalFn = setInterval,
-    clearIntervalFn = clearInterval
+    clearIntervalFn = clearInterval,
+    documentObj = typeof document !== 'undefined' ? document : null,
+    windowObj = typeof window !== 'undefined' ? window : null,
+    now = () => Date.now(),
+    visibilityCooldownMs = 5000
   } = {}
 ) => {
   if (typeof callback === 'function' && !subscribers.includes(callback)) {
@@ -110,34 +116,65 @@ export const subscribeToLiveMatches = (
     lastNotifiedSignature = null;
   }
 
+  const runLivePoll = async () => {
+    if (isLivePolling || subscribers.length === 0) return;
+    isLivePolling = true;
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const dateStr = fixedDateStr || `${yyyy}${mm}${dd}`;
+
+    try {
+      const currentMatches = await getMatches(dateStr, {
+        strict: true,
+        forceRefresh: true
+      });
+      lastPollCompletedAt = now();
+      const signature = JSON.stringify(currentMatches);
+      if (signature !== lastNotifiedSignature) {
+        lastNotifiedSignature = signature;
+        subscribers.slice().forEach(sub => sub(structuredClone(currentMatches)));
+      }
+    } catch {
+      // Keep the last successful snapshot when all competitions fail.
+    } finally {
+      isLivePolling = false;
+    }
+  };
+
   if (!liveRefreshInterval) {
     clearLiveRefreshInterval = clearIntervalFn;
-    liveRefreshInterval = setIntervalFn(async () => {
-      if (isLivePolling || subscribers.length === 0) return;
-      isLivePolling = true;
+    liveRefreshInterval = setIntervalFn(runLivePoll, intervalMs);
 
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      const dateStr = fixedDateStr || `${yyyy}${mm}${dd}`;
+    const handleResumeRefresh = () => {
+      if (documentObj && documentObj.visibilityState === 'hidden') return;
+      if (lastPollCompletedAt > 0 && now() - lastPollCompletedAt < visibilityCooldownMs) return;
+      runLivePoll();
+    };
 
-      try {
-        const currentMatches = await getMatches(dateStr, {
-          strict: true,
-          forceRefresh: true
-        });
-        const signature = JSON.stringify(currentMatches);
-        if (signature !== lastNotifiedSignature) {
-          lastNotifiedSignature = signature;
-          subscribers.slice().forEach(sub => sub(structuredClone(currentMatches)));
-        }
-      } catch {
-        // Keep the last successful snapshot when all competitions fail.
-      } finally {
-        isLivePolling = false;
+    const handleVisibilityChange = () => {
+      if (documentObj?.visibilityState === 'visible') {
+        handleResumeRefresh();
       }
-    }, intervalMs);
+    };
+
+    if (documentObj && typeof documentObj.addEventListener === 'function') {
+      documentObj.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    if (windowObj && typeof windowObj.addEventListener === 'function') {
+      windowObj.addEventListener('online', handleResumeRefresh);
+    }
+
+    activeVisibilityCleanup = () => {
+      if (documentObj && typeof documentObj.removeEventListener === 'function') {
+        documentObj.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      if (windowObj && typeof windowObj.removeEventListener === 'function') {
+        windowObj.removeEventListener('online', handleResumeRefresh);
+      }
+    };
   }
 
   return () => {
@@ -147,6 +184,11 @@ export const subscribeToLiveMatches = (
       liveRefreshInterval = null;
       lastNotifiedSignature = null;
       isLivePolling = false;
+      lastPollCompletedAt = 0;
+      if (activeVisibilityCleanup) {
+        activeVisibilityCleanup();
+        activeVisibilityCleanup = null;
+      }
     }
   };
 };
