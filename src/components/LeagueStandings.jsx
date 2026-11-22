@@ -283,19 +283,6 @@ const LeagueStandings = ({
   );
   const [competitionFilter, setCompetitionFilter] = useState('');
 
-  const categoryTabs = useMemo(() => [
-    {
-      id: COMPETITION_CATEGORIES.CLUB,
-      label: 'بطولات الأندية',
-      count: organizedLeagues.club.competitions.length
-    },
-    {
-      id: COMPETITION_CATEGORIES.NATIONAL,
-      label: 'بطولات المنتخبات',
-      count: organizedLeagues.national.competitions.length
-    }
-  ], [organizedLeagues]);
-
   const activeCategoryData = activeCategory === COMPETITION_CATEGORIES.NATIONAL
     ? organizedLeagues.national
     : organizedLeagues.club;
@@ -323,11 +310,7 @@ const LeagueStandings = ({
   }, [activeCategoryData, activeCategory, organizedLeagues, competitionFilter]);
 
   const dropdownOptions = useMemo(() => {
-    const allOrdered = [
-      ...organizedLeagues.club.competitions,
-      ...organizedLeagues.national.competitions
-    ];
-    return allOrdered.map(l => ({
+    return activeCategoryData.competitions.map(l => ({
       value: l.id,
       label: l.id === 'egypt.1' ? `${l.name} (${EGYPTIAN_BADGE_TEXT})` : l.name,
       icon: l.logo,
@@ -335,7 +318,7 @@ const LeagueStandings = ({
       groupLabel: l.subCategoryLabel,
       league: l
     }));
-  }, [organizedLeagues]);
+  }, [activeCategoryData]);
 
   const setActiveLeague = (newLeague) => {
     if (competitionFilter) {
@@ -559,7 +542,7 @@ const LeagueStandings = ({
             </div>
           </div>
 
-          {/* اختيار البطولة في الهواتف الذكية عبر Dropdown موحد ومصنف */}
+          {/* اختيار البطولة في الهواتف الذكية عبر Dropdown موحد ومصنف وفق الفئة المختارة خارجياً بدون تكرار تبويبات الفئة */}
           <div className="standings-mobile-dropdown">
             <Dropdown
               options={dropdownOptions}
@@ -568,9 +551,6 @@ const LeagueStandings = ({
               icon={<Trophy size={14} color="var(--accent)" />}
               ariaLabel="اختيار البطولة"
               fullWidth
-              categoryTabs={categoryTabs}
-              activeCategory={activeCategory}
-              onCategoryChange={handleCategorySwitch}
               searchable={true}
               searchPlaceholder="ابحث عن بطولة..."
               filterOption={(opt, q) => matchesCompetitionFilter(opt.league || { id: opt.value, name: opt.label }, q)}

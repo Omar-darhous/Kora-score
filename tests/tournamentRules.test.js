@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   isTournament,
   isNationalTournament,
@@ -1423,4 +1424,15 @@ test('category switching selects default competition (eng.1 vs fifa.world), upda
   assert.equal(controller.getState().standings[0].entries[0].team, 'ENG.1');
   assert.deepEqual(loadedLeagues, ['eng.1', 'fifa.world', 'eng.1']);
   controller.dispose();
+
+  // 7. Mobile standings dropdown scopes options to activeCategoryData.competitions and does NOT render duplicate internal categoryTabs
+  const standingsJsx = readFileSync(new URL('../src/components/LeagueStandings.jsx', import.meta.url), 'utf8');
+  const scheduleJsx = readFileSync(new URL('../src/components/MatchSchedule.jsx', import.meta.url), 'utf8');
+  const dropdownJsx = readFileSync(new URL('../src/components/Dropdown.jsx', import.meta.url), 'utf8');
+
+  assert.equal(standingsJsx.includes('className="competition-category-segmented"'), true, 'external segmented category control must exist');
+  assert.equal(standingsJsx.includes('activeCategoryData.competitions.map'), true, 'dropdownOptions must contain only competitions in the externally selected category');
+  assert.equal(standingsJsx.includes('categoryTabs='), false, 'LeagueStandings Dropdown must not pass internal categoryTabs');
+  assert.equal(scheduleJsx.includes('categoryTabs={scheduleCategoryTabs}'), true, 'MatchSchedule Dropdown retains internal categoryTabs');
+  assert.equal(dropdownJsx.includes('dropdown-category-tabs'), true, 'Reusable Dropdown component retains categoryTabs support');
 });
