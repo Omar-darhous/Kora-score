@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Search, X } from 'lucide-react';
 import { computeMobilePortalPosition } from '../utils/dropdownPosition';
 
 const DESKTOP_PORTAL_MIN_WIDTH = 768;
@@ -20,7 +20,13 @@ const Dropdown = ({
   fullWidth = false,
   align = 'auto',
   useDesktopPortal = false,
-  useMobilePortal = false
+  useMobilePortal = false,
+  categoryTabs = null,
+  activeCategory: propActiveCategory = null,
+  onCategoryChange = null,
+  searchable = false,
+  searchPlaceholder = 'ابحث عن بطولة...',
+  filterOption = null
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState('bottom');
@@ -28,13 +34,63 @@ const Dropdown = ({
   const [portalStyle, setPortalStyle] = useState(null);
   const [scrollAreaStyle, setScrollAreaStyle] = useState(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [internalCategory, setInternalCategory] = useState(() => {
+    if (propActiveCategory) return propActiveCategory;
+    if (Array.isArray(categoryTabs) && categoryTabs.length > 0) {
+      return categoryTabs[0].id;
+    }
+    return null;
+  });
+  const [searchQuery, setSearchQuery] = useState('');
 
   const containerRef = useRef(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
   const selectedItemRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
+  const hasCategories = Array.isArray(categoryTabs) && categoryTabs.length > 0;
+  const activeCategory = propActiveCategory !== null ? propActiveCategory : internalCategory;
+
+  const setActiveCategory = useCallback((nextCat) => {
+    if (onCategoryChange) {
+      onCategoryChange(nextCat);
+    } else {
+      setInternalCategory(nextCat);
+    }
+    setFocusedIndex(0);
+  }, [onCategoryChange]);
+
+  const visibleOptions = useMemo(() => {
+    const trimmedQuery = searchQuery.trim();
+    const matchesSearch = (opt) => {
+      if (!trimmedQuery) return true;
+      if (typeof filterOption === 'function') {
+        return filterOption(opt, trimmedQuery);
+      }
+      return String(opt.label || '').toLowerCase().includes(trimmedQuery.toLowerCase());
+    };
+
+    const inCategory = options.filter((opt) => {
+      if (hasCategories && activeCategory && activeCategory !== 'all') {
+        if (opt.category && opt.category !== activeCategory) {
+          return false;
+        }
+        if (opt.value === 'all') {
+          return false;
+        }
+      }
+      return matchesSearch(opt);
+    });
+
+    if (inCategory.length > 0 || !trimmedQuery) {
+      return inCategory;
+    }
+
+    // Fallback when searching by name across categories
+    return options.filter((opt) => opt.value !== 'all' && matchesSearch(opt));
+  }, [options, hasCategories, activeCategory, searchQuery, filterOption]);
 
   // تحديث تموضع القائمة الذكي بناءً على حدود الشاشة (Collision Detection)
   const updatePosition = useCallback(() => {
@@ -141,8 +197,17 @@ const Dropdown = ({
   const toggleOpen = () => {
     if (disabled) return;
     if (!isOpen) {
+      setSearchQuery('');
+      if (hasCategories && propActiveCategory === null) {
+        const selectedCat = selectedOption?.category;
+        if (selectedCat && categoryTabs.some(t => t.id === selectedCat)) {
+          setInternalCategory(selectedCat);
+        } else if (categoryTabs.some(t => t.id === 'all')) {
+          setInternalCategory('all');
+        }
+      }
       updatePosition();
-      const currentIndex = options.findIndex((opt) => opt.value === value);
+      const currentIndex = visibleOptions.findIndex((opt) => opt.value === value);
       setFocusedIndex(currentIndex >= 0 ? currentIndex : 0);
     }
     setIsOpen((prev) => !prev);
@@ -151,6 +216,7 @@ const Dropdown = ({
   const handleClose = useCallback(() => {
     setIsOpen(false);
     setFocusedIndex(-1);
+    setSearchQuery('');
   }, []);
 
   // تمرير الخيار المختار إلى مجال الرؤية فور فتح القائمة
@@ -213,17 +279,20 @@ const Dropdown = ({
         break;
       case 'ArrowDown':
         e.preventDefault();
-        setFocusedIndex((prev) => (prev < options.length - 1 ? prev + 1 : 0));
+        setFocusedIndex((prev) => (visibleOptions.length > 0 && prev < visibleOptions.length - 1 ? prev + 1 : 0));
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setFocusedIndex((prev) => (prev > 0 ? prev - 1 : options.length - 1));
+        setFocusedIndex((prev) => (visibleOptions.length > 0 && prev > 0 ? prev - 1 : Math.max(0, visibleOptions.length - 1)));
         break;
       case 'Enter':
       case ' ':
+        if (e.key === ' ' && searchable && document.activeElement === searchInputRef.current) {
+          return;
+        }
         e.preventDefault();
-        if (focusedIndex >= 0 && focusedIndex < options.length) {
-          const opt = options[focusedIndex];
+        if (focusedIndex >= 0 && focusedIndex < visibleOptions.length) {
+          const opt = visibleOptions[focusedIndex];
           if (!opt.disabled) {
             onChange(opt.value);
             handleClose();
@@ -232,12 +301,14 @@ const Dropdown = ({
         }
         break;
       case 'Home':
+        if (searchable && document.activeElement === searchInputRef.current) return;
         e.preventDefault();
         setFocusedIndex(0);
         break;
       case 'End':
+        if (searchable && document.activeElement === searchInputRef.current) return;
         e.preventDefault();
-        setFocusedIndex(options.length - 1);
+        setFocusedIndex(Math.max(0, visibleOptions.length - 1));
         break;
       default:
         break;
@@ -256,51 +327,116 @@ const Dropdown = ({
       {isOpen && (
         <motion.div
           ref={menuRef}
-          className={`custom-dropdown-menu ${portalStyle ? 'portal-menu' : `placement-${placement} align-${horizAlign}`}`}
+          className={`custom-dropdown-menu ${(hasCategories || searchable) ? 'categorized-dropdown-menu' : ''} ${portalStyle ? 'portal-menu' : `placement-${placement} align-${horizAlign}`}`}
           style={portalStyle || undefined}
           role="listbox"
           aria-label={ariaLabel}
           tabIndex={-1}
+          onKeyDown={handleKeyDown}
           initial={{ opacity: 0, scale: 0.96, y: placement === 'bottom' ? -6 : 6 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: placement === 'bottom' ? -6 : 6 }}
           transition={{ duration: 0.15, ease: 'easeOut' }}
         >
+          {(hasCategories || searchable) && (
+            <div className="dropdown-controls-header" onClick={(e) => e.stopPropagation()}>
+              {hasCategories && (
+                <div className="dropdown-category-tabs" role="tablist" aria-label="تصنيف البطولات">
+                  {categoryTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeCategory === tab.id}
+                      className={`dropdown-category-tab ${activeCategory === tab.id ? 'active' : ''}`}
+                      onClick={() => setActiveCategory(tab.id)}
+                    >
+                      <span>{tab.label}</span>
+                      {typeof tab.count === 'number' && (
+                        <span className="dropdown-category-count">{tab.count}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {searchable && (
+                <div className="dropdown-search-box">
+                  <Search size={13} className="dropdown-search-icon" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    className="dropdown-search-input"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setFocusedIndex(0);
+                    }}
+                    placeholder={searchPlaceholder}
+                    aria-label={searchPlaceholder}
+                    dir="rtl"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      className="dropdown-search-clear"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setFocusedIndex(0);
+                        searchInputRef.current?.focus();
+                      }}
+                      aria-label="مسح البحث"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="custom-dropdown-scroll-area" style={scrollAreaStyle || undefined}>
-            {options.length === 0 ? (
-              <div className="custom-dropdown-empty">لا توجد خيارات متاحة</div>
+            {visibleOptions.length === 0 ? (
+              <div className="custom-dropdown-empty">لا توجد بطولات مطابقة</div>
             ) : (
-              options.map((opt, index) => {
+              visibleOptions.map((opt, index) => {
                 const isSelected = opt.value === value;
                 const isFocused = index === focusedIndex;
+                const prevGroupLabel = index > 0 ? visibleOptions[index - 1]?.groupLabel : null;
+                const showGroupHeader = Boolean(opt.groupLabel && opt.groupLabel !== prevGroupLabel);
 
                 return (
-                  <div
-                    key={opt.value}
-                    ref={isSelected ? selectedItemRef : null}
-                    role="option"
-                    aria-selected={isSelected}
-                    aria-disabled={opt.disabled}
-                    className={`custom-dropdown-option ${isSelected ? 'selected' : ''} ${isFocused ? 'focused' : ''} ${opt.disabled ? 'disabled' : ''}`}
-                    onClick={() => handleSelect(opt.value, opt.disabled)}
-                    onMouseEnter={() => setFocusedIndex(index)}
-                  >
-                    <div className="dropdown-option-left">
-                      {opt.icon && (
-                        <img
-                          src={opt.icon}
-                          alt=""
-                          className="dropdown-option-img"
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                      )}
-                      <span className="dropdown-option-label">{opt.label}</span>
-                    </div>
-
-                    {isSelected && (
-                      <Check size={15} className="dropdown-check-icon" aria-hidden="true" />
+                  <React.Fragment key={opt.value}>
+                    {showGroupHeader && (
+                      <div className="dropdown-group-heading" role="presentation">
+                        {opt.groupLabel}
+                      </div>
                     )}
-                  </div>
+                    <div
+                      ref={isSelected ? selectedItemRef : null}
+                      role="option"
+                      aria-selected={isSelected}
+                      aria-disabled={opt.disabled}
+                      className={`custom-dropdown-option ${isSelected ? 'selected' : ''} ${isFocused ? 'focused' : ''} ${opt.disabled ? 'disabled' : ''}`}
+                      onClick={() => handleSelect(opt.value, opt.disabled)}
+                      onMouseEnter={() => setFocusedIndex(index)}
+                    >
+                      <div className="dropdown-option-left">
+                        {opt.icon && (
+                          <img
+                            src={opt.icon}
+                            alt=""
+                            className="dropdown-option-img"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        )}
+                        <span className="dropdown-option-label">{opt.label}</span>
+                      </div>
+
+                      {isSelected && (
+                        <Check size={15} className="dropdown-check-icon" aria-hidden="true" />
+                      )}
+                    </div>
+                  </React.Fragment>
                 );
               })
             )}

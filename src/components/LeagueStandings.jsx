@@ -1,10 +1,20 @@
 import KnockoutBracket from './KnockoutBracket';
-import { isTournament, isUefaClubTournament, qualification } from '../services/tournamentRules';
+import {
+  isTournament,
+  isNationalTournament,
+  isUefaClubTournament,
+  qualification,
+  COMPETITION_CATEGORIES,
+  getCompetitionClassification,
+  organizeCompetitions,
+  resolveCategorySwitchSelection
+} from '../services/tournamentRules';
+import { matchesCompetitionFilter } from '../services/searchService';
 import RequestState from './RequestState';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Trophy, RefreshCw } from 'lucide-react';
+import { Trophy, RefreshCw, Shield, Globe, Search, X } from 'lucide-react';
 import { createStandingsController, getLeagues, getTournamentKnockouts } from '../services/footballService';
 import { isHistoricalSeasonSelected } from '../services/standingsService';
 import { TableRowSkeleton } from './Skeleton';
@@ -266,12 +276,90 @@ const LeagueStandings = ({
   const activeLeague = propActiveLeague !== undefined ? propActiveLeague : internalLeague;
   const selectedSeason = onSeasonChange ? propSelectedSeason : (propSelectedSeason ?? internalSeason);
 
+  const organizedLeagues = useMemo(() => organizeCompetitions(leagues), [leagues]);
+  const activeCategory = useMemo(
+    () => getCompetitionClassification(activeLeague).category,
+    [activeLeague]
+  );
+  const [competitionFilter, setCompetitionFilter] = useState('');
+
+  const categoryTabs = useMemo(() => [
+    {
+      id: COMPETITION_CATEGORIES.CLUB,
+      label: 'بطولات الأندية',
+      count: organizedLeagues.club.competitions.length
+    },
+    {
+      id: COMPETITION_CATEGORIES.NATIONAL,
+      label: 'بطولات المنتخبات',
+      count: organizedLeagues.national.competitions.length
+    }
+  ], [organizedLeagues]);
+
+  const activeCategoryData = activeCategory === COMPETITION_CATEGORIES.NATIONAL
+    ? organizedLeagues.national
+    : organizedLeagues.club;
+
+  const visibleSubGroups = useMemo(() => {
+    const query = competitionFilter.trim();
+    if (!query) return activeCategoryData.subGroups;
+
+    const filterGroups = (subGroups) =>
+      subGroups
+        .map(group => ({
+          ...group,
+          competitions: group.competitions.filter(l => matchesCompetitionFilter(l, query))
+        }))
+        .filter(group => group.competitions.length > 0);
+
+    const inActive = filterGroups(activeCategoryData.subGroups);
+    if (inActive.length > 0) return inActive;
+
+    // If user searches for a competition from the other category, surface matches across both categories
+    const otherCategoryData = activeCategory === COMPETITION_CATEGORIES.NATIONAL
+      ? organizedLeagues.club
+      : organizedLeagues.national;
+    return filterGroups(otherCategoryData.subGroups);
+  }, [activeCategoryData, activeCategory, organizedLeagues, competitionFilter]);
+
+  const dropdownOptions = useMemo(() => {
+    const allOrdered = [
+      ...organizedLeagues.club.competitions,
+      ...organizedLeagues.national.competitions
+    ];
+    return allOrdered.map(l => ({
+      value: l.id,
+      label: l.id === 'egypt.1' ? `${l.name} (${EGYPTIAN_BADGE_TEXT})` : l.name,
+      icon: l.logo,
+      category: l.category,
+      groupLabel: l.subCategoryLabel,
+      league: l
+    }));
+  }, [organizedLeagues]);
+
   const setActiveLeague = (newLeague) => {
+    if (competitionFilter) {
+      setCompetitionFilter('');
+    }
     if (onLeagueChange) {
       onLeagueChange(newLeague);
     } else {
       setInternalLeague(newLeague);
       setInternalSeason(null);
+    }
+  };
+
+  const handleCategorySwitch = (targetCategory) => {
+    if (competitionFilter) {
+      setCompetitionFilter('');
+    }
+    const { leagueId: nextLeagueId, changed } = resolveCategorySwitchSelection(
+      targetCategory,
+      activeLeague,
+      leagues
+    );
+    if (changed && nextLeagueId) {
+      setActiveLeague(nextLeagueId);
     }
   };
 
@@ -420,47 +508,115 @@ const LeagueStandings = ({
 
       {!hideLeagueSelector && (
         <>
-          {/* اختيار البطولة في الهواتف الذكية عبر Dropdown موحد */}
+          {/* شريط تصنيف البطولات: بطولات الأندية / بطولات المنتخبات + تصفية سريعة */}
+          <div className="competition-nav-toolbar">
+            <div className="competition-category-segmented" role="tablist" aria-label="تصنيف البطولات">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeCategory === COMPETITION_CATEGORIES.CLUB}
+                className={`competition-category-btn ${activeCategory === COMPETITION_CATEGORIES.CLUB ? 'active' : ''}`}
+                onClick={() => handleCategorySwitch(COMPETITION_CATEGORIES.CLUB)}
+              >
+                <Shield size={15} />
+                <span>بطولات الأندية</span>
+                <span className="competition-category-badge">{organizedLeagues.club.competitions.length}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeCategory === COMPETITION_CATEGORIES.NATIONAL}
+                className={`competition-category-btn ${activeCategory === COMPETITION_CATEGORIES.NATIONAL ? 'active' : ''}`}
+                onClick={() => handleCategorySwitch(COMPETITION_CATEGORIES.NATIONAL)}
+              >
+                <Globe size={15} />
+                <span>بطولات المنتخبات</span>
+                <span className="competition-category-badge">{organizedLeagues.national.competitions.length}</span>
+              </button>
+            </div>
+
+            <div className="competition-inline-filter">
+              <Search size={14} className="competition-filter-icon" />
+              <input
+                type="text"
+                className="competition-filter-input"
+                value={competitionFilter}
+                onChange={(e) => setCompetitionFilter(e.target.value)}
+                placeholder="تصفية البطولات بالاسم..."
+                aria-label="تصفية البطولات بالاسم"
+                dir="rtl"
+              />
+              {competitionFilter && (
+                <button
+                  type="button"
+                  className="competition-filter-clear"
+                  onClick={() => setCompetitionFilter('')}
+                  aria-label="مسح تصفية البطولات"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* اختيار البطولة في الهواتف الذكية عبر Dropdown موحد ومصنف */}
           <div className="standings-mobile-dropdown">
             <Dropdown
-              options={leagues.map(l => ({
-                value: l.id,
-                label: l.id === 'egypt.1' ? `${l.name} (${EGYPTIAN_BADGE_TEXT})` : l.name,
-                icon: l.logo
-              }))}
+              options={dropdownOptions}
               value={activeLeague}
               onChange={setActiveLeague}
               icon={<Trophy size={14} color="var(--accent)" />}
               ariaLabel="اختيار البطولة"
               fullWidth
+              categoryTabs={categoryTabs}
+              activeCategory={activeCategory}
+              onCategoryChange={handleCategorySwitch}
+              searchable={true}
+              searchPlaceholder="ابحث عن بطولة..."
+              filterOption={(opt, q) => matchesCompetitionFilter(opt.league || { id: opt.value, name: opt.label }, q)}
             />
           </div>
 
-          {/* تبويبات اختيار الدوري */}
-          <div className="tabs-container">
-            {leagues.map((league) => (
-              <button
-                key={league.id}
-                className={`tab-btn ${activeLeague === league.id ? 'active' : ''}`}
-                onClick={() => setActiveLeague(league.id)}
-              >
-                <span className="d-flex align-center gap-1">
-                  {league.logo ? (
-                    <img
-                      src={league.logo}
-                      alt={league.name}
-                      style={{ width: 18, height: 18, objectFit: 'contain' }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  ) : (
-                    <Trophy size={16} color="var(--accent)" />
-                  )}
-                  <span>{league.name}</span>
-                  {league.id === 'egypt.1' && <EgyptianBadge style={{ marginRight: 4 }} />}
-                </span>
-              </button>
-            ))}
-          </div>
+          {/* تبويبات اختيار البطولة على سطح المكتب مصنفة حسب الفئة الفرعية */}
+          {visibleSubGroups.length === 0 ? (
+            <div className="glass-card empty-state" style={{ padding: '16px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                لا توجد بطولات تطابق "{competitionFilter}"
+              </p>
+            </div>
+          ) : (
+            <div className="competition-subgroups-stack">
+              {visibleSubGroups.map((subGroup) => (
+                <div key={subGroup.id} className="competition-subgroup-row">
+                  <span className="competition-subgroup-label">{subGroup.label}</span>
+                  <div className="tabs-container">
+                    {subGroup.competitions.map((league) => (
+                      <button
+                        key={league.id}
+                        className={`tab-btn ${activeLeague === league.id ? 'active' : ''}`}
+                        onClick={() => setActiveLeague(league.id)}
+                      >
+                        <span className="d-flex align-center gap-1">
+                          {league.logo ? (
+                            <img
+                              src={league.logo}
+                              alt={league.name}
+                              style={{ width: 18, height: 18, objectFit: 'contain' }}
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          ) : (
+                            <Trophy size={16} color="var(--accent)" />
+                          )}
+                          <span>{league.name}</span>
+                          {league.id === 'egypt.1' && <EgyptianBadge style={{ marginRight: 4 }} />}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -489,7 +645,7 @@ const LeagueStandings = ({
 
       {isTournament(activeLeague) && <div className="glass-card request-state" role="note">
         <strong>{standingsGroups[0]?.season?.displayName || 'موسم البطولة'}</strong>
-        <p>{activeLeague === 'fifa.world' && Number(seasonYear) === 2026 ? 'يتأهل أول وثاني كل مجموعة وأفضل 8 ثوالث إلى دور الـ32. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ32 المنشورة.' : activeLeague === 'afc.asian.cup' && standingsGroups.length > 0 && standingsGroups.every(g => g.entries.every(t => Number(t.played || 0) === 0)) ? 'بطولة قادمة لم تبدأ بعد — يتأهل أول وثاني كل مجموعة وأفضل 4 ثوالث إلى دور الـ16 عند انطلاق المنافسات. يمكنك اختيار نسخة 2023 من قائمة المواسم لعرض النتائج الكاملة.' : (activeLeague === 'caf.nations' && Number(seasonYear) >= 2019) || (activeLeague === 'uefa.euro' && Number(seasonYear) >= 2016) || (activeLeague === 'afc.asian.cup' && Number(seasonYear) >= 2019) ? 'يتأهل أول وثاني كل مجموعة وأفضل 4 ثوالث إلى دور الـ16. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ16 المنشورة.' : activeLeague === 'conmebol.america' && standingsGroups.length === 2 ? 'يتأهل أصحاب المراكز الأربعة الأولى من كل مجموعة مباشرةً إلى ربع النهائي.' : activeLeague === 'conmebol.america' && standingsGroups.length === 4 ? 'يتأهل أول وثاني كل مجموعة مباشرةً إلى ربع النهائي.' : isUefaClubTournament(activeLeague) && Number(seasonYear) >= 2024 ? 'المراكز 1–8 إلى دور الـ16، والمراكز 9–24 إلى الملحق. المراكز الحالية لا تعني ضمان التأهل قبل اكتمال مرحلة الدوري.' : 'تُعرض قواعد التأهل وفق موسم البطولة المتاح.'}</p>
+        <p>{activeLeague === 'fifa.world' && Number(seasonYear) === 2026 ? 'يتأهل أول وثاني كل مجموعة وأفضل 8 ثوالث إلى دور الـ32. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ32 المنشورة.' : activeLeague === 'afc.asian.cup' && standingsGroups.length > 0 && standingsGroups.every(g => g.entries.every(t => Number(t.played || 0) === 0)) ? 'بطولة قادمة لم تبدأ بعد — يتأهل أول وثاني كل مجموعة وأفضل 4 ثوالث إلى دور الـ16 عند انطلاق المنافسات. يمكنك اختيار نسخة 2023 من قائمة المواسم لعرض النتائج الكاملة.' : activeLeague === 'uefa.nations' && Number(seasonYear) >= 2024 ? 'المستوى A: يتأهل الأول والثاني إلى ربع النهائي، ويخوض الثالث ملحق البقاء ويهبط الرابع إلى المستوى B. المستويات B وC وD: يصعد المتصدر مباشرةً ويخوض الوصيف ملحق الصعود.' : activeLeague === 'uefa.nations' ? 'المستوى A: يتأهل متصدر كل مجموعة مباشرةً إلى نصف النهائي (Final Four). المستويات B وC وD: يصعد متصدر كل مجموعة إلى المستوى الأعلى.' : (activeLeague === 'caf.nations' && Number(seasonYear) >= 2019) || (activeLeague === 'uefa.euro' && Number(seasonYear) >= 2016) || (activeLeague === 'afc.asian.cup' && Number(seasonYear) >= 2019) ? 'يتأهل أول وثاني كل مجموعة وأفضل 4 ثوالث إلى دور الـ16. تأكيد تأهل صاحب المركز الثالث يعتمد على مواجهات دور الـ16 المنشورة.' : activeLeague === 'conmebol.america' && standingsGroups.length === 2 ? 'يتأهل أصحاب المراكز الأربعة الأولى من كل مجموعة مباشرةً إلى ربع النهائي.' : activeLeague === 'conmebol.america' && standingsGroups.length === 4 ? 'يتأهل أول وثاني كل مجموعة مباشرةً إلى ربع النهائي.' : isUefaClubTournament(activeLeague) && Number(seasonYear) >= 2024 ? 'المراكز 1–8 إلى دور الـ16، والمراكز 9–24 إلى الملحق. المراكز الحالية لا تعني ضمان التأهل قبل اكتمال مرحلة الدوري.' : 'تُعرض قواعد التأهل وفق موسم البطولة المتاح.'}</p>
         {knockoutError && subTab === 'groups' && <button type="button" className="tab-btn" onClick={() => setKnockoutRetry(n => n + 1)}>تعذر التحقق من المتأهلين — إعادة المحاولة</button>}
       </div>}
       {suppressDomesticZones && standingsGroups.length > 0 && (
@@ -534,7 +690,7 @@ const LeagueStandings = ({
               <thead>
                 <tr>
                   <th style={{ width: 44, textAlign: 'center' }}>#</th>
-                  <th style={{ textAlign: 'right' }}>الفريق</th>
+                  <th style={{ textAlign: 'right' }}>{isNationalTournament(activeLeague) ? 'المنتخب' : 'الفريق'}</th>
                   <th style={{ width: 50, textAlign: 'center' }}>لعب</th>
                   <th style={{ width: 45, textAlign: 'center' }}>فاز</th>
                   <th style={{ width: 45, textAlign: 'center' }}>تعادل</th>
@@ -600,7 +756,7 @@ const LeagueStandings = ({
                       <thead>
                         <tr>
                           <th style={{ width: 50, textAlign: 'center' }}>#</th>
-                          <th style={{ textAlign: 'right' }}>الفريق</th>
+                          <th style={{ textAlign: 'right' }}>{isNationalTournament(activeLeague) ? 'المنتخب' : 'الفريق'}</th>
                           <th style={{ width: 50, textAlign: 'center' }}>لعب</th>
                           <th style={{ width: 45, textAlign: 'center' }}>فاز</th>
                           <th style={{ width: 45, textAlign: 'center' }}>تعادل</th>

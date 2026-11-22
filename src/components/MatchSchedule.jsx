@@ -1,4 +1,6 @@
 import { finishedMatchLabel, isUnplayedMatchStatus, getMatchStatusLabel } from '../services/matchResult';
+import { COMPETITION_CATEGORIES, organizeCompetitions } from '../services/tournamentRules';
+import { matchesCompetitionFilter } from '../services/searchService';
 import RequestState from './RequestState';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,24 +28,24 @@ const formatDateToDisplay = (dateStr) => {
   const y = dateStr.substring(0, 4);
   const m = parseInt(dateStr.substring(4, 6), 10) - 1;
   const d = parseInt(dateStr.substring(6, 8), 10);
-  
+
   const dateObj = new Date(y, m, d);
   const dayName = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'][dateObj.getDay()];
   const monthName = ARABIC_MONTHS[m];
   return `${dayName}، ${d} ${monthName} ${y}`;
 };
 
-const MatchSchedule = ({ 
+const MatchSchedule = ({
   matches,
   loading = false,
   error,
   onRetry,
-  selectedDateStr, 
-  setSelectedDateStr, 
-  selectedLeague, 
-  setSelectedLeague, 
-  leagues, 
-  onMatchClick 
+  selectedDateStr,
+  setSelectedDateStr,
+  selectedLeague,
+  setSelectedLeague,
+  leagues,
+  onMatchClick
 }) => {
   const [showCalendar, setShowCalendar] = useState(false);
   const calendarRef = useRef(null);
@@ -180,6 +182,31 @@ const MatchSchedule = ({
 
   const groupKeys = Object.keys(groupedMatches);
 
+  const organizedLeagues = useMemo(() => organizeCompetitions(leagues), [leagues]);
+  const scheduleDropdownOptions = useMemo(() => {
+    const allOrdered = [
+      ...organizedLeagues.club.competitions,
+      ...organizedLeagues.national.competitions
+    ];
+    return [
+      { value: 'all', label: 'كل البطولات' },
+      ...allOrdered.map(l => ({
+        value: l.id,
+        label: l.id === 'egypt.1' ? `${l.name} (${EGYPTIAN_BADGE_TEXT})` : l.name,
+        icon: l.logo,
+        category: l.category,
+        groupLabel: l.subCategoryLabel,
+        league: l
+      }))
+    ];
+  }, [organizedLeagues]);
+
+  const scheduleCategoryTabs = useMemo(() => [
+    { id: 'all', label: 'الكل', count: organizedLeagues.club.competitions.length + organizedLeagues.national.competitions.length },
+    { id: COMPETITION_CATEGORIES.CLUB, label: 'الأندية', count: organizedLeagues.club.competitions.length },
+    { id: COMPETITION_CATEGORIES.NATIONAL, label: 'المنتخبات', count: organizedLeagues.national.competitions.length }
+  ], [organizedLeagues]);
+
   return (
     <div className="schedule-container">
       {/* Controls Bar: Dates & League Filters */}
@@ -193,19 +220,16 @@ const MatchSchedule = ({
 
           {/* League Selector Dropdown */}
           <Dropdown
-            options={[
-              { value: 'all', label: 'كل البطولات' },
-              ...leagues.map(l => ({ 
-                value: l.id, 
-                label: l.id === 'egypt.1' ? `${l.name} (${EGYPTIAN_BADGE_TEXT})` : l.name, 
-                icon: l.logo 
-              }))
-            ]}
+            options={scheduleDropdownOptions}
             value={selectedLeague}
             onChange={setSelectedLeague}
             icon={<Filter size={14} />}
             ariaLabel="تصفية حسب البطولة"
             className="league-filter-dropdown"
+            categoryTabs={scheduleCategoryTabs}
+            searchable={true}
+            searchPlaceholder="ابحث عن بطولة..."
+            filterOption={(opt, q) => opt.value !== 'all' && matchesCompetitionFilter(opt.league || { id: opt.value, name: opt.label }, q)}
           />
         </div>
 
@@ -238,9 +262,9 @@ const MatchSchedule = ({
 
           {/* Calendar Picker Popover */}
           <div className="calendar-wrapper" ref={calendarRef}>
-            <button 
+            <button
               type="button"
-              className="calendar-toggle-btn" 
+              className="calendar-toggle-btn"
               onClick={() => setShowCalendar(!showCalendar)}
               aria-label="اختيار تاريخ مخصص"
             >
@@ -251,12 +275,12 @@ const MatchSchedule = ({
             <AnimatePresence>
               {showCalendar && (
                 <>
-                  <div 
-                    className="calendar-backdrop" 
-                    onClick={() => setShowCalendar(false)} 
-                    aria-hidden="true" 
+                  <div
+                    className="calendar-backdrop"
+                    onClick={() => setShowCalendar(false)}
+                    aria-hidden="true"
                   />
-                  <motion.div 
+                  <motion.div
                     className="calendar-popover"
                     initial={{ opacity: 0, y: 8, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -265,76 +289,76 @@ const MatchSchedule = ({
                   >
                     <div className="calendar-popover-header">
                       <div className="calendar-header-nav">
-                        <button 
-                          type="button" 
-                          className="calendar-nav-btn" 
-                          onClick={handlePrevMonth} 
+                        <button
+                          type="button"
+                          className="calendar-nav-btn"
+                          onClick={handlePrevMonth}
                           aria-label="الشهر السابق"
                           title="الشهر السابق"
                         >
                           <ChevronRight size={18} />
                         </button>
                         <span className="calendar-header-title">{ARABIC_MONTHS[viewMonth]} {viewYear}</span>
-                        <button 
-                          type="button" 
-                          className="calendar-nav-btn" 
-                          onClick={handleNextMonth} 
+                        <button
+                          type="button"
+                          className="calendar-nav-btn"
+                          onClick={handleNextMonth}
                           aria-label="الشهر التالي"
                           title="الشهر التالي"
                         >
                           <ChevronLeft size={18} />
                         </button>
                       </div>
-                      <button 
-                        type="button" 
-                        className="calendar-close-btn" 
-                        onClick={() => setShowCalendar(false)} 
+                      <button
+                        type="button"
+                        className="calendar-close-btn"
+                        onClick={() => setShowCalendar(false)}
                         aria-label="إغلاق التقويم"
                       >
                         <X size={16} />
                       </button>
                     </div>
 
-                  <div className="calendar-grid-weekdays">
-                    {ARABIC_DAYS.map(day => (
-                      <span key={day}>{day}</span>
-                    ))}
-                  </div>
+                    <div className="calendar-grid-weekdays">
+                      {ARABIC_DAYS.map(day => (
+                        <span key={day}>{day}</span>
+                      ))}
+                    </div>
 
-                  <div className="calendar-grid-days">
-                    {calendarDays.map((cell) => {
-                      if (cell.type === 'empty') {
-                        return <div key={cell.id} className="calendar-day-cell empty" />;
-                      }
-                      return (
-                        <div
-                          key={cell.formatted}
-                          className={`calendar-day-cell ${selectedDateStr === cell.formatted ? 'active' : ''} ${cell.isToday ? 'today' : ''}`}
-                          onClick={() => handleSelectDay(cell.formatted)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleSelectDay(cell.formatted); }}
-                        >
-                          {cell.dayNum}
-                        </div>
-                      );
-                    })}
-                  </div>
+                    <div className="calendar-grid-days">
+                      {calendarDays.map((cell) => {
+                        if (cell.type === 'empty') {
+                          return <div key={cell.id} className="calendar-day-cell empty" />;
+                        }
+                        return (
+                          <div
+                            key={cell.formatted}
+                            className={`calendar-day-cell ${selectedDateStr === cell.formatted ? 'active' : ''} ${cell.isToday ? 'today' : ''}`}
+                            onClick={() => handleSelectDay(cell.formatted)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSelectDay(cell.formatted); }}
+                          >
+                            {cell.dayNum}
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                  <div className="calendar-popover-footer">
-                    <button 
-                      type="button" 
-                      className="calendar-shortcut-btn" 
-                      onClick={() => { setSelectedDateStr(todayStr); setShowCalendar(false); }}
-                    >
-                      العودة لتاريخ اليوم
-                    </button>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>اضغط على أي يوم للتصفح</span>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+                    <div className="calendar-popover-footer">
+                      <button
+                        type="button"
+                        className="calendar-shortcut-btn"
+                        onClick={() => { setSelectedDateStr(todayStr); setShowCalendar(false); }}
+                      >
+                        العودة لتاريخ اليوم
+                      </button>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>اضغط على أي يوم للتصفح</span>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -362,17 +386,17 @@ const MatchSchedule = ({
                 {/* League Header */}
                 <div className="league-group-header">
                   {league.logo && (
-                    <img 
-                      src={league.logo} 
-                      alt={league.name} 
-                      className="team-logo" 
+                    <img
+                      src={league.logo}
+                      alt={league.name}
+                      className="team-logo"
                       onError={(e) => { e.target.style.display = 'none'; }}
                     />
                   )}
                   <span>{league.name}</span>
                   {isEgyptianGroup && <EgyptianBadge style={{ marginRight: 6 }} />}
                 </div>
-                
+
                 {/* Notice for Egyptian League in multi-league list */}
                 {isEgyptianGroup && selectedLeague !== 'egypt.1' && (
                   <EgyptianDisclaimer style={{ margin: '8px 0 12px' }} />
@@ -395,10 +419,10 @@ const MatchSchedule = ({
                       {/* Home Team (Right in RTL) */}
                       <div className="match-team-home">
                         {match.homeLogo && (
-                          <img 
-                            src={match.homeLogo} 
-                            alt={match.homeTeam} 
-                            className="team-logo" 
+                          <img
+                            src={match.homeLogo}
+                            alt={match.homeTeam}
+                            className="team-logo"
                             onError={(e) => { e.target.style.display = 'none'; }}
                           />
                         )}
@@ -418,7 +442,7 @@ const MatchSchedule = ({
                             </>
                           )}
                         </div>
-                        
+
                         {match.status === 'LIVE' && (
                           <span className="match-status-tag live">
                             <span className="live-dot" />
@@ -446,10 +470,10 @@ const MatchSchedule = ({
                       <div className="match-team-away">
                         <span className="team-name" title={match.awayTeam}>{match.awayTeam}</span>
                         {match.awayLogo && (
-                          <img 
-                            src={match.awayLogo} 
-                            alt={match.awayTeam} 
-                            className="team-logo" 
+                          <img
+                            src={match.awayLogo}
+                            alt={match.awayTeam}
+                            className="team-logo"
                             onError={(e) => { e.target.style.display = 'none'; }}
                           />
                         )}

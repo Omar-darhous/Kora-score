@@ -196,8 +196,9 @@ const sortMatchesChronologically = (matches = []) => [...matches].sort((a, b) =>
 const resolveCompetitionStage = (match) => {
   const slug = String(match?.seasonSlug || '').toLowerCase().trim();
   if (/league-phase/.test(slug)) return { id: 'stage-league-phase', label: 'مرحلة الدوري', order: 1 };
-  if (/group-stage|group/.test(slug)) return { id: 'stage-group-stage', label: 'دور المجموعات', order: 1 };
+  if (/group-stage|group|^league-[a-d]$/.test(slug)) return { id: 'stage-group-stage', label: 'دور المجموعات', order: 1 };
   if (/regular-season/.test(slug)) return { id: 'stage-regular-season', label: 'الموسم المنتظم', order: 1 };
+  if (/relegation.*playoff|promotion.*playoff/.test(slug)) return { id: 'stage-relegation-playoff', label: 'ملحق الصعود والهبوط', order: 2 };
   if (/playoff|play-off|wild-card/.test(slug)) return { id: 'stage-playoff', label: 'ملحق الأدوار الإقصائية', order: 2 };
   if (/round-of-32|round-one/.test(slug)) return { id: 'stage-r32', label: 'دور الـ 32', order: 3 };
   if (/round-of-16/.test(slug)) return { id: 'stage-r16', label: 'دور الـ 16', order: 4 };

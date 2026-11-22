@@ -16,6 +16,7 @@ import {
 import { useFavorites } from '../context/FavoritesContext';
 import { getFavoriteMatchesFromLoaded } from '../services/favoritesService';
 import { POPULAR_TEAMS } from '../services/searchService';
+import { COMPETITION_CATEGORIES, organizeCompetitions } from '../services/tournamentRules';
 import FavoriteButton from '../components/FavoriteButton';
 import { EgyptianDisclaimer, EgyptianBadge } from '../components/EgyptianDisclaimer';
 
@@ -29,6 +30,13 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick, matchesLoadin
   } = useFavorites();
 
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'teams' | 'leagues' | 'matches'
+  const [discoveryCategory, setDiscoveryCategory] = useState('all'); // 'all' | 'club' | 'national'
+  const organizedDiscovery = useMemo(() => organizeCompetitions(leagues), [leagues]);
+  const visibleDiscoveryLeagues = useMemo(() => {
+    if (discoveryCategory === COMPETITION_CATEGORIES.CLUB) return organizedDiscovery.club.competitions;
+    if (discoveryCategory === COMPETITION_CATEGORIES.NATIONAL) return organizedDiscovery.national.competitions;
+    return [...organizedDiscovery.club.competitions, ...organizedDiscovery.national.competitions];
+  }, [discoveryCategory, organizedDiscovery]);
 
   // إثراء بيانات البطولات المفضلة من قائمة البطولات الحية إن توفرت
   const enrichedFavoriteLeagues = useMemo(() => {
@@ -495,9 +503,40 @@ const FavoritesPage = ({ matches = [], leagues = [], onMatchClick, matchesLoadin
 
         {/* بطولات مقترحة */}
         <div className="fav-discovery-group">
-          <h3 className="fav-discovery-subtitle">البطولات المتاحة</h3>
+          <div className="d-flex align-center justify-between flex-wrap gap-2" style={{ marginBottom: 10 }}>
+            <h3 className="fav-discovery-subtitle" style={{ margin: 0 }}>البطولات المتاحة</h3>
+            <div className="competition-category-segmented compact" role="tablist" aria-label="تصنيف البطولات المتاحة">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={discoveryCategory === 'all'}
+                className={`competition-category-btn ${discoveryCategory === 'all' ? 'active' : ''}`}
+                onClick={() => setDiscoveryCategory('all')}
+              >
+                <span>الكل</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={discoveryCategory === COMPETITION_CATEGORIES.CLUB}
+                className={`competition-category-btn ${discoveryCategory === COMPETITION_CATEGORIES.CLUB ? 'active' : ''}`}
+                onClick={() => setDiscoveryCategory(COMPETITION_CATEGORIES.CLUB)}
+              >
+                <span>بطولات الأندية</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={discoveryCategory === COMPETITION_CATEGORIES.NATIONAL}
+                className={`competition-category-btn ${discoveryCategory === COMPETITION_CATEGORIES.NATIONAL ? 'active' : ''}`}
+                onClick={() => setDiscoveryCategory(COMPETITION_CATEGORIES.NATIONAL)}
+              >
+                <span>بطولات المنتخبات</span>
+              </button>
+            </div>
+          </div>
           <div className="fav-discovery-chips">
-            {leagues.map((league) => {
+            {visibleDiscoveryLeagues.map((league) => {
               const isMock = league.id === 'egypt.1';
               return (
                 <div key={league.id} className="fav-discovery-chip">

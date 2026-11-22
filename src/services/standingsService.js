@@ -1,6 +1,7 @@
 import { cachedJson } from './requestCache.js';
 import { resolveTeamLogo } from './logoUtils.js';
 import { getMockEgyptianStandings } from './egyptianMockService.js';
+import { parseNationsLeagueGroup } from './tournamentRules.js';
 
 const normalizeSeasonParam = (season) => {
   if (season === undefined || season === null || season === '') return null;
@@ -56,22 +57,41 @@ export const isHistoricalSeasonSelected = (selectedSeason, availableSeasons = []
   return true;
 };
 
-const formatSeasonLabel = (year, displayName = '') => {
+const formatSeasonLabel = (year, displayName = '', leagueId = '') => {
+  const isCompactSplitLeague = leagueId === 'uefa.nations' || /nations league/i.test(String(displayName || ''));
   if (typeof displayName === 'string') {
     const shortSpan = displayName.match(/\b(\d{4})-(\d{2})\b/);
     if (shortSpan) {
       const startYear = Number(shortSpan[1]);
-      if (Number.isInteger(startYear)) return `${startYear}/${startYear + 1}`;
+      if (Number.isInteger(startYear)) {
+        return isCompactSplitLeague
+          ? `${startYear}/${String(startYear + 1).slice(-2)}`
+          : `${startYear}/${startYear + 1}`;
+      }
     }
     const fullSpan = displayName.match(/\b(\d{4})[/-](\d{4})\b/);
-    if (fullSpan) return `${fullSpan[1]}/${fullSpan[2]}`;
+    if (fullSpan) {
+      return isCompactSplitLeague
+        ? `${fullSpan[1]}/${fullSpan[2].slice(-2)}`
+        : `${fullSpan[1]}/${fullSpan[2]}`;
+    }
     const singleYear = displayName.match(/\b(19\d{2}|20\d{2})\b/);
-    if (singleYear) return singleYear[1];
+    if (singleYear) {
+      if (isCompactSplitLeague && Number.isInteger(Number(singleYear[1]))) {
+        const sy = Number(singleYear[1]);
+        return `${sy}/${String(sy + 1).slice(-2)}`;
+      }
+      return singleYear[1];
+    }
+  }
+  if (isCompactSplitLeague && Number.isInteger(Number(year))) {
+    const sy = Number(year);
+    return `${sy}/${String(sy + 1).slice(-2)}`;
   }
   return String(year);
 };
 
-export const parseAvailableSeasons = (rawSeasons, { currentSeasonYear = null } = {}) => {
+export const parseAvailableSeasons = (rawSeasons, { currentSeasonYear = null, leagueId = '' } = {}) => {
   if (!Array.isArray(rawSeasons) || rawSeasons.length === 0) return [];
   const seenYears = new Set();
   const normalizedCurrent = normalizeSeasonParam(currentSeasonYear);
@@ -89,7 +109,7 @@ export const parseAvailableSeasons = (rawSeasons, { currentSeasonYear = null } =
 
     const entry = {
       year,
-      label: formatSeasonLabel(year, displayName),
+      label: formatSeasonLabel(year, displayName, leagueId),
       displayName,
       isCurrent: normalizedCurrent !== null && !Number.isNaN(normalizedCurrent)
         ? year === normalizedCurrent
@@ -202,10 +222,64 @@ export const getStandings = async (leagueId = 'eng.1', { strict = false, forceRe
       }
     }
 
-    const children = data.children || [];
+    let children = Array.isArray(data.children) ? [...data.children] : [];
+
+    // In the 2018/19 UEFA Nations League edition, ESPN stores League A/B/C/D under separate seasontype=1..4 endpoints.
+    if (leagueId === 'uefa.nations' && Number(season?.year) === 2018) {
+      const presentLevels = new Set(
+        children.map(c => parseNationsLeagueGroup(c?.name)?.level).filter(Boolean)
+      );
+      if (presentLevels.size < 4) {
+        const divisionPages = await Promise.all(
+          [1, 2, 3, 4].map(async (st) => {
+            try {
+              return await cachedJson(`${baseUrl}?season=2018&seasontype=${st}`, { ttl, forceRefresh });
+            } catch {
+              return null;
+            }
+          })
+        );
+        const merged = [];
+        for (const page of divisionPages) {
+          if (Array.isArray(page?.children)) {
+            merged.push(...page.children);
+          }
+        }
+        if (merged.length > 0) {
+          children = [...merged, ...children];
+        }
+      }
+    }
 
     let result = [];
-    if (children.length === 1) {
+    if (leagueId === 'uefa.nations') {
+      const seenGroups = new Set();
+      const formattedGroups = [];
+      for (const group of children) {
+        const entries = parseStandingsEntries(group?.standings?.entries || []);
+        if (entries.length === 0) continue;
+        const meta = parseNationsLeagueGroup(group?.name || '');
+        const dedupeKey = meta ? meta.key : String(group?.name || '').trim().toUpperCase();
+        if (dedupeKey && seenGroups.has(dedupeKey)) continue;
+        if (dedupeKey) seenGroups.add(dedupeKey);
+        const groupName = meta ? meta.arabicName : (group?.name || 'المجموعة');
+        formattedGroups.push({
+          name: groupName,
+          rawName: group?.name || groupName,
+          leagueLevel: meta?.level || null,
+          levelOrder: meta?.levelOrder ?? 99,
+          groupNumber: meta?.number ?? 99,
+          season,
+          entries: entries.map(entry => ({ ...entry, groupName, leagueLevel: meta?.level || null }))
+        });
+      }
+      formattedGroups.sort((a, b) => {
+        if (a.levelOrder !== b.levelOrder) return a.levelOrder - b.levelOrder;
+        if (a.groupNumber !== b.groupNumber) return a.groupNumber - b.groupNumber;
+        return String(a.name).localeCompare(String(b.name));
+      });
+      result = formattedGroups.map(({ levelOrder: _lo, groupNumber: _gn, ...rest }) => rest);
+    } else if (children.length === 1) {
       const entries = children[0]?.standings?.entries || [];
       result = [{
         name: data.name || 'ترتيب الدوري',
@@ -227,7 +301,8 @@ export const getStandings = async (leagueId = 'eng.1', { strict = false, forceRe
     }
 
     const availableSeasons = parseAvailableSeasons(data.seasons, {
-      currentSeasonYear: requestedSeason === null ? season?.year ?? null : null
+      currentSeasonYear: requestedSeason === null ? season?.year ?? null : null,
+      leagueId
     });
     if (availableSeasons.length > 0) {
       result.availableSeasons = availableSeasons;

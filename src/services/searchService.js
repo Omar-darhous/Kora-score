@@ -384,7 +384,7 @@ export const POPULAR_TEAMS = [
 /**
  * أسماء مستعارة وكلمات مفتاحية للبطولات
  */
-const LEAGUE_ALIASES = {
+export const LEAGUE_ALIASES = {
   'eng.1': ['الدوري الانجليزي', 'البريميرليج', 'بريميرليج', 'premier league', 'epl', 'انجلترا', 'انجلترا'],
   'esp.1': ['الدوري الاسباني', 'لاليجا', 'لا ليجا', 'la liga', 'اسبانيا', 'الليجا'],
   'ita.1': ['الدوري الايطالي', 'الكالتشيو', 'سيريا اي', 'serie a', 'ايطاليا'],
@@ -398,9 +398,31 @@ const LEAGUE_ALIASES = {
   'fifa.world': ['كاس العالم', 'المونديال', 'world cup', 'فيفا', 'كأس العالم'],
   'caf.nations': ['كأس الأمم الإفريقية', 'كأس الامم الافريقية', 'أمم أفريقيا', 'امم افريقيا', 'افريقيا', 'إفريقيا', 'afcon', 'africa cup of nations', 'can'],
   'uefa.euro': ['كأس أمم أوروبا', 'كأس الامم الاوروبية', 'كاس امم اوروبا', 'أمم أوروبا', 'امم اوروبا', 'يورو', 'euro', 'uefa euro', 'european championship'],
+  'uefa.nations': ['دوري الأمم الأوروبية', 'دوري الامم الاوروبية', 'دوري الأمم', 'دوري الامم', 'الأمم الأوروبية', 'الامم الاوروبية', 'uefa nations league', 'nations league', 'unl'],
   'conmebol.america': ['كوبا أمريكا', 'كوبا امريكا', 'كوبا', 'copa america', 'copa américa', 'conmebol copa america'],
   'afc.asian.cup': ['كأس آسيا', 'كاس اسيا', 'كأس الأمم الآسيوية', 'كأس الامم الاسيوية', 'asian cup', 'afc asian cup', 'afc'],
   'usa.1': ['الدوري الامريكي', 'ام ال اس', 'mls', 'امريكا']
+};
+
+export const matchesCompetitionFilter = (league, query = '') => {
+  const clean = String(query || '').trim();
+  if (!clean) return true;
+  if (!league || typeof league !== 'object') return false;
+  const normalizedQuery = normalizeSearchText(clean);
+  if (!normalizedQuery) return true;
+  const terms = normalizedQuery.split(' ').filter(Boolean);
+  const normName = normalizeSearchText(league.name || '');
+  const normCountry = normalizeSearchText(league.country || '');
+  const normId = normalizeSearchText(league.id || '');
+  const normSub = normalizeSearchText(league.subCategoryLabel || '');
+  const aliases = (LEAGUE_ALIASES[league.id] || []).map(normalizeSearchText);
+  return terms.every(t => (
+    normName.includes(t) ||
+    normCountry.includes(t) ||
+    normId.includes(t) ||
+    normSub.includes(t) ||
+    aliases.some(a => a.includes(t))
+  ));
 };
 
 /**

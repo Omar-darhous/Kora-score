@@ -1062,6 +1062,288 @@ body {
   color: var(--text-muted);
 }
 
+/* Categorized & Searchable Competition Dropdown Additions */
+.custom-dropdown-menu.categorized-dropdown-menu {
+  min-width: min(300px, calc(100vw - 24px));
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 8px;
+}
+
+.dropdown-controls-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dropdown-category-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-surface);
+  padding: 3px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+}
+
+.dropdown-category-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.dropdown-category-tab:hover {
+  color: var(--text-primary);
+}
+
+.dropdown-category-tab.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 6px var(--primary-glow);
+}
+
+.dropdown-category-count {
+  font-size: 0.66rem;
+  font-family: var(--font-mono);
+  padding: 1px 5px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.dropdown-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+}
+
+.dropdown-search-box:focus-within {
+  border-color: var(--primary);
+}
+
+.dropdown-search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.dropdown-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  outline: none;
+  min-width: 0;
+}
+
+.dropdown-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.dropdown-search-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-full);
+}
+
+.dropdown-search-clear:hover {
+  color: var(--text-primary);
+}
+
+.dropdown-group-heading {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--accent);
+  padding: 6px 10px 3px 10px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+  letter-spacing: 0.2px;
+}
+
+.dropdown-group-heading:first-child {
+  margin-top: 0;
+  border-top: none;
+}
+
+/* Competition Navigation Toolbar & Segmented Controls (Standings & Favorites) */
+.competition-nav-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.competition-category-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-surface);
+  padding: 4px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+}
+
+.competition-category-segmented.compact {
+  padding: 3px;
+}
+
+.competition-category-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.competition-category-segmented.compact .competition-category-btn {
+  padding: 4px 11px;
+  font-size: 0.76rem;
+}
+
+.competition-category-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
+}
+
+.competition-category-btn.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--primary-glow);
+}
+
+.competition-category-badge {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.14);
+  font-weight: 800;
+}
+
+.competition-inline-filter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 6px 12px;
+  min-width: 210px;
+  max-width: 280px;
+  flex: 1;
+  transition: border-color var(--transition-fast);
+}
+
+.competition-inline-filter:focus-within {
+  border-color: var(--primary);
+}
+
+.competition-filter-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.competition-filter-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+  min-width: 0;
+}
+
+.competition-filter-input::placeholder {
+  color: var(--text-muted);
+}
+
+.competition-filter-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-full);
+}
+
+.competition-filter-clear:hover {
+  color: var(--text-primary);
+}
+
+.competition-subgroups-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.competition-subgroup-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.competition-subgroup-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--accent);
+  padding: 0 4px;
+}
+
+@media (max-width: 680px) {
+  .competition-subgroups-stack {
+    display: none;
+  }
+  .competition-inline-filter {
+    display: none;
+  }
+  .competition-category-segmented {
+    width: 100%;
+  }
+  .competition-category-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
 /* ============================================================
    CALENDAR POPOVER & MOBILE SHEET
    ============================================================ */

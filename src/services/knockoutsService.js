@@ -6,10 +6,11 @@ import { classifyRound, rounds, isUefaClubTournament } from './tournamentRules.j
 export const getTournamentKnockouts = async (leagueId, seasonYear) => {
   const year = Number(seasonYear);
   if (!Number.isInteger(year) || year < 1900) throw new Error('Season unavailable');
-  // European club seasons and cross-year/postponed international editions (AFCON, EURO 2020, Copa 2021, Asian Cup 2023) span into year + 1.
+  // European club seasons, UEFA Nations League, and cross-year/postponed international editions span into year + 1.
   const years =
     isUefaClubTournament(leagueId) ||
     leagueId === 'uefa.euro' ||
+    leagueId === 'uefa.nations' ||
     leagueId === 'caf.nations' ||
     leagueId === 'conmebol.america' ||
     leagueId === 'afc.asian.cup'
@@ -26,6 +27,8 @@ export const getTournamentKnockouts = async (leagueId, seasonYear) => {
     seen.add(event.id);
     const comp = event.competitions?.[0];
     if (!comp) continue;
+    const rawStageText = [event.season?.slug, comp.altGameNote, ...(comp.notes || []).map(n => n?.text)].filter(Boolean).join(' ');
+    if (/qualif|preliminary|relegation|promotion/i.test(rawStageText)) continue;
     const stage = classifyRound(event.season?.slug) || classifyRound(comp.altGameNote) || classifyRound((comp.notes || []).map(n => n.text).join(' '));
     if (!stage) continue;
     const home = comp.competitors?.find(c => c.homeAway === 'home') || {};

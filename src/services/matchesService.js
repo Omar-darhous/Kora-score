@@ -6,9 +6,10 @@ import { resolveLeagueLogo, resolveTeamLogo } from './logoUtils.js';
 
 // ترجمة الأدوار الإقصائية إلى العربية
 export const mapKnockoutStage = (slug) => {
+  if (/relegation.*playoff|promotion.*playoff/i.test(slug || '')) return 'ملحق الصعود والهبوط';
   const key = classifyRound(slug);
   if (key) return rounds.find(([id]) => id === key)?.[1] || null;
-  return /group|league.phase/i.test(slug || '') ? 'مرحلة المجموعات / الدوري' : null;
+  return /group|league.phase|^league-[a-d]$/i.test(slug || '') ? 'مرحلة المجموعات / الدوري' : null;
 };
 
 // ترجمة الجولات الأسبوعية إلى العربية

@@ -410,7 +410,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
           onClick={() => setActiveTab('teams')}
         >
           <Users size={16} />
-          <span>الأندية المشاركة</span>
+          <span>{isNationalTournament(leagueId) ? 'المنتخبات المشاركة' : 'الأندية المشاركة'}</span>
           {totalTeamsCount > 0 && (
             <span className="league-tab-badge">{totalTeamsCount}</span>
           )}
@@ -828,13 +828,13 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
           </div>
         )}
 
-        {/* التبويب الثالث: الأندية المشاركة */}
+        {/* التبويب الثالث: الأندية / المنتخبات المشاركة */}
         {activeTab === 'teams' && (
           <div className="league-teams-section">
             <div className="d-flex align-center justify-between" style={{ marginBottom: 14 }}>
               <h3 className="section-title" style={{ margin: 0 }}>
                 <Users size={18} color="var(--primary)" />
-                <span>أندية {league.name}</span>
+                <span>{isNationalTournament(leagueId) ? `منتخبات ${league.name}` : `أندية ${league.name}`}</span>
                 <span className="section-badge-count">{totalTeamsCount}</span>
               </h3>
             </div>
@@ -861,7 +861,7 @@ const LeaguePage = ({ matches = [], leagues = [], onMatchClick, matchesLoading, 
               </div>
             ) : standings.length === 0 ? (
               <div className="glass-card empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-muted)' }}>بيانات أندية هذه البطولة غير متوفرة حالياً.</p>
+                <p style={{ color: 'var(--text-muted)' }}>{isNationalTournament(leagueId) ? 'بيانات منتخبات هذه البطولة غير متوفرة حالياً.' : 'بيانات أندية هذه البطولة غير متوفرة حالياً.'}</p>
               </div>
             ) : (
               <div className="d-flex flex-column gap-4">
